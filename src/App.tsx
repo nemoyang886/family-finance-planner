@@ -8,6 +8,7 @@ import {
   CircleNotch,
   Coins,
   DownloadSimple,
+  FilePdf,
   FilePlus,
   FileText,
   FloppyDisk,
@@ -17,7 +18,6 @@ import {
   Info,
   ListChecks,
   PiggyBank,
-  Printer,
   ShieldCheck,
   SlidersHorizontal,
   Sparkle,
@@ -48,7 +48,7 @@ type StepId =
 
 type ViewMode = "form" | "report";
 type SaveStatus = "saved" | "saving";
-type ExportStatus = "idle" | "exporting";
+type ExportStatus = "idle" | "pdf" | "image";
 
 const policyPeople = [
   { id: "self", label: "本人", role: "主要收入来源者" },
@@ -551,7 +551,7 @@ function getPolicyTypeReview(data: PlannerData, policyTypeId: PolicyTypeId) {
     items.map((item) => item.person.label).join("、");
   const description =
     state === "missing"
-      ? `${names(missing)}尚未配置，初筛发现明确的结构性缺口。`
+      ? `${names(missing)}尚未配置，家庭保障结构存在明确缺口。`
       : state === "pending"
         ? [
             amountMissing.length > 0
@@ -561,7 +561,7 @@ function getPolicyTypeReview(data: PlannerData, policyTypeId: PolicyTypeId) {
           ]
             .filter(Boolean)
             .join("；") + "。"
-        : "所有适用成员均已录入配置和保额，仍需在获得完整保单后检视责任、期限与除外事项。";
+        : "所有适用成员均已明确配置并记录保额，仍需结合完整保单检视责任、期限与除外事项。";
 
   return {
     people,
@@ -2062,14 +2062,14 @@ function ReportSheetHeader({
 
 function ReportSheetFooter({
   page,
-  status,
+  recipient,
 }: {
   page: number;
-  status: string;
+  recipient: string;
 }) {
   return (
     <footer className="sheet-footer">
-      <span>家庭财务规划报告书 · {status}</span>
+      <span>家庭财务安全分析报告 · {recipient}</span>
       <b>{String(page).padStart(2, "0")}</b>
     </footer>
   );
@@ -2218,7 +2218,7 @@ function getHouseholdRiskResult(
   }
   if (policyReview.pending + policyReview.amountMissing > 0) {
     watches.push(
-      `${policyReview.pending + policyReview.amountMissing}项保单初筛资料待补充`,
+      `${policyReview.pending + policyReview.amountMissing}项保障配置需要进一步确认`,
     );
   }
 
@@ -2244,8 +2244,8 @@ function getHouseholdRiskResult(
   } else {
     level = "结构稳健";
     tone = "good";
-    reasons = ["当前已录入项目未发现明显结构性缺口"];
-    description = "当前资料范围内结构相对稳健，建议在家庭责任变化时重新检视。";
+    reasons = ["家庭现金流、资产负债与保障结构未见明显缺口"];
+    description = "家庭财务结构相对稳健，建议在家庭责任变化时定期重新检视。";
   }
 
   return { level, tone, description, reasons };
@@ -2262,10 +2262,13 @@ function ReportPage({
 }) {
   const reportRef = useRef<HTMLDivElement>(null);
   const [exportStatus, setExportStatus] = useState<ExportStatus>("idle");
-  const dataStatus = data.dataConfirmed ? "家庭资料已确认" : "家庭资料待确认";
   const policyReview = getPolicyReview(data);
   const medicalReview = getPolicyTypeReview(data, "medical");
   const householdRisk = getHouseholdRiskResult(data, metrics);
+  const reportRecipient =
+    data.householdName.trim().replace(/家庭$/, "") || "尊敬的客户";
+  const reportTitle = `家庭财务安全分析报告——${reportRecipient}`;
+  const safeReportName = reportTitle.replace(/[\\/:*?"<>|]/g, "-");
   const policySummaries = Object.fromEntries(
     policyPeople.map((person) => [
       person.id,
@@ -2447,6 +2450,25 @@ function ReportPage({
   const evaluatedIndicators = indicators.filter(
     (item) => item.tone !== "pending",
   );
+  const indicatorGroups = [
+    {
+      name: "财务安全",
+      description: "先稳住生活与保障底座",
+    },
+    {
+      name: "财务独立",
+      description: "让收入覆盖支出并持续结余",
+    },
+    {
+      name: "财务自由",
+      description: "让非工资收入逐步支撑生活",
+    },
+  ].map((group) => ({
+    ...group,
+    indicators: indicators.filter(
+      (indicator) => indicator.group === group.name,
+    ),
+  }));
   const adultPolicyTypesToReview = policyTypes.filter(
     (policyType) =>
       getPolicyAssessment(data.policyCoverage.self[policyType.id]) !==
@@ -2456,6 +2478,56 @@ function ReportPage({
   );
   const policyItemsToVerify =
     policyReview.missing + policyReview.pending + policyReview.amountMissing;
+  const financialSafetyReady =
+    metrics.income > 0 &&
+    metrics.expense > 0 &&
+    metrics.assets > 0 &&
+    metrics.surplus >= 0 &&
+    metrics.emergencyMonths >= 6 &&
+    metrics.debtRatio < 50 &&
+    policyReview.missing === 0;
+  const financialIndependenceReady =
+    financialSafetyReady &&
+    metrics.independenceRatio > 100 &&
+    metrics.surplusRate >= 30;
+  const financialFreedomReady =
+    financialIndependenceReady && metrics.freedomRatio >= 100;
+  type FinancialStageKey = "safety" | "independence" | "freedom";
+  const financialPosition: {
+    key: FinancialStageKey;
+    label: string;
+    description: string;
+  } = financialFreedomReady
+    ? {
+        key: "freedom",
+        label: "财务自由层",
+        description:
+          "家庭已具备安全底座与稳定结余，非工资收入可以覆盖必要生活支出。",
+      }
+    : financialIndependenceReady
+      ? {
+          key: "independence",
+          label: "财务独立层",
+          description:
+            "家庭安全底座已经建立，收入能够覆盖支出并持续形成稳定结余。",
+        }
+      : {
+          key: "safety",
+          label: "财务安全建设期",
+          description:
+            "家庭当前应优先稳固应急资金、基础保障与现金流安全底座。",
+        };
+  const financialStageRank: Record<FinancialStageKey, number> = {
+    safety: 0,
+    independence: 1,
+    freedom: 2,
+  };
+  const pyramidLayerState = (key: FinancialStageKey) => {
+    const layerRank = financialStageRank[key];
+    const positionRank = financialStageRank[financialPosition.key];
+    if (layerRank === positionRank) return "is-current";
+    return layerRank < positionRank ? "is-foundation" : "is-future";
+  };
   const planningDirections = [
     {
       title: "现金流安全",
@@ -2473,14 +2545,14 @@ function ReportPage({
       status:
         policyItemsToVerify > 0
           ? `${policyItemsToVerify} 项保障资料或责任需要确认`
-          : "初筛未发现明确未配置项目",
+          : "保障配置中未见明确空缺",
       description:
         adultPolicyTypesToReview.length > 0
           ? `主要收入来源者的${adultPolicyTypesToReview
               .slice(0, 3)
               .map((policyType) => policyType.label)
               .join("、")}需要优先核对。完整保单到位后，应确认责任范围、保额、期限、续保条件和受益人安排。`
-          : "保单数量和保额只是初筛。还需确认医疗费用、重大疾病后的收入中断，以及身故后的负债和家庭责任是否都有明确资金来源。",
+          : "配置情况和保额只能反映保障基础。还需确认医疗费用、重大疾病后的收入中断，以及身故后的负债和家庭责任是否都有明确资金来源。",
     },
     {
       title: "长期目标安排",
@@ -2489,22 +2561,133 @@ function ReportPage({
     },
   ];
 
-  const downloadReport = async () => {
-    if (!reportRef.current || exportStatus === "exporting") return;
-    setExportStatus("exporting");
+  const renderReportPages = async () => {
+    if (!reportRef.current) return [];
+    reportRef.current.classList.add("is-exporting");
     try {
-      const image = await toPng(reportRef.current, {
-        cacheBust: true,
-        backgroundColor: "#eef2f5",
-        pixelRatio: 1.5,
+      await document.fonts.ready;
+      await new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
       });
-      const link = document.createElement("a");
-      const safeName = data.householdName.trim().replace(/[\\/:*?"<>|]/g, "-");
-      link.download = `${safeName || "家庭"}-家庭财务规划报告书.png`;
-      link.href = image;
-      link.click();
+      const sheets = Array.from(
+        reportRef.current.querySelectorAll<HTMLElement>(".report-sheet"),
+      );
+      const pages: Array<{
+        dataUrl: string;
+        width: number;
+        height: number;
+      }> = [];
+      for (const sheet of sheets) {
+        pages.push({
+          dataUrl: await toPng(sheet, {
+            cacheBust: true,
+            backgroundColor: "#fffdfb",
+            pixelRatio: 1.5,
+          }),
+          width: sheet.offsetWidth,
+          height: sheet.offsetHeight,
+        });
+      }
+      return pages;
+    } finally {
+      reportRef.current.classList.remove("is-exporting");
+    }
+  };
+
+  const downloadPdfReport = async () => {
+    if (!reportRef.current || exportStatus !== "idle") return;
+    setExportStatus("pdf");
+    try {
+      const pages = await renderReportPages();
+      if (pages.length === 0) throw new Error("报告页面不存在");
+      const { jsPDF } = await import("jspdf");
+      const pageWidth = 210;
+      const pageHeights = pages.map(
+        (page) => pageWidth * (page.height / page.width),
+      );
+      const pdf = new jsPDF({
+        orientation: "portrait",
+        unit: "mm",
+        format: [pageWidth, pageHeights[0]],
+        compress: true,
+      });
+      pdf.setProperties({
+        title: reportTitle,
+        subject: "家庭财务安全分析",
+        author: data.advisorName || "家庭财务规划顾问",
+      });
+      pages.forEach((page, index) => {
+        if (index > 0) {
+          pdf.addPage([pageWidth, pageHeights[index]], "portrait");
+        }
+        pdf.addImage(
+          page.dataUrl,
+          "PNG",
+          0,
+          0,
+          pageWidth,
+          pageHeights[index],
+          undefined,
+          "FAST",
+        );
+      });
+      pdf.save(`${safeReportName}.pdf`);
     } catch {
-      window.alert("完整长图生成失败，请尝试使用“打印 / PDF”导出。");
+      window.alert("PDF 生成失败，请稍后重试。");
+    } finally {
+      setExportStatus("idle");
+    }
+  };
+
+  const downloadLongImage = async () => {
+    if (!reportRef.current || exportStatus !== "idle") return;
+    setExportStatus("image");
+    try {
+      const pages = await renderReportPages();
+      if (pages.length === 0) throw new Error("报告页面不存在");
+      const images = await Promise.all(
+        pages.map(
+          (page) =>
+            new Promise<HTMLImageElement>((resolve, reject) => {
+              const image = new Image();
+              image.onload = () => resolve(image);
+              image.onerror = reject;
+              image.src = page.dataUrl;
+            }),
+        ),
+      );
+      const outerPadding = 36;
+      const pageGap = 30;
+      const canvas = document.createElement("canvas");
+      canvas.width =
+        Math.max(...images.map((image) => image.naturalWidth)) +
+        outerPadding * 2;
+      canvas.height =
+        images.reduce((sum, image) => sum + image.naturalHeight, 0) +
+        pageGap * (images.length - 1) +
+        outerPadding * 2;
+      const context = canvas.getContext("2d");
+      if (!context) throw new Error("无法创建长图画布");
+      context.fillStyle = "#f5eee7";
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      let y = outerPadding;
+      images.forEach((image) => {
+        const x = Math.round((canvas.width - image.naturalWidth) / 2);
+        context.drawImage(image, x, y);
+        y += image.naturalHeight + pageGap;
+      });
+      const blob = await new Promise<Blob | null>((resolve) =>
+        canvas.toBlob(resolve, "image/png"),
+      );
+      if (!blob) throw new Error("长图生成失败");
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.download = `${safeReportName}-完整长图.png`;
+      link.href = url;
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch {
+      window.alert("完整长图生成失败，请稍后重试。");
     } finally {
       setExportStatus("idle");
     }
@@ -2522,23 +2705,28 @@ function ReportPage({
           <button
             className="button button-secondary compact"
             type="button"
-            onClick={() => window.print()}
+            onClick={downloadPdfReport}
+            disabled={exportStatus !== "idle"}
           >
-            <Printer size={17} />
-            打印 / PDF
+            {exportStatus === "pdf" ? (
+              <CircleNotch className="spin" size={17} />
+            ) : (
+              <FilePdf size={17} />
+            )}
+            {exportStatus === "pdf" ? "生成 PDF 中" : "导出 PDF"}
           </button>
           <button
             className="button button-primary compact"
             type="button"
-            onClick={downloadReport}
-            disabled={exportStatus === "exporting"}
+            onClick={downloadLongImage}
+            disabled={exportStatus !== "idle"}
           >
-            {exportStatus === "exporting" ? (
+            {exportStatus === "image" ? (
               <CircleNotch className="spin" size={17} />
             ) : (
               <DownloadSimple size={17} />
             )}
-            {exportStatus === "exporting" ? "生成中" : "下载完整长图"}
+            {exportStatus === "image" ? "生成长图中" : "导出完整长图"}
           </button>
         </div>
       </div>
@@ -2546,48 +2734,75 @@ function ReportPage({
       <div className="report-document" ref={reportRef}>
         <article className="report-sheet report-cover-sheet">
           <header className="cover-heading">
-            <span className="report-label">家庭财务规划报告书</span>
-            <h1>{data.householdName}</h1>
+            <span className="report-label">家庭财务安全与长期规划</span>
+            <h1>
+              <span>家庭财务安全分析报告</span>
+              <small>——{reportRecipient}</small>
+            </h1>
             <p>看清当下，安排未来，让家庭的每一次选择更从容。</p>
           </header>
 
           <dl className="cover-meta">
             <div><dt>报告日期</dt><dd>{formatReportDate()}</dd></div>
-            <div><dt>资料状态</dt><dd>{dataStatus}</dd></div>
             <div><dt>家庭阶段</dt><dd>{data.stage}</dd></div>
+            <div><dt>首要目标</dt><dd>{data.priorityGoal}</dd></div>
             <div><dt>规划顾问</dt><dd>{data.advisorName || "待填写"}</dd></div>
             <div><dt>顾问身份</dt><dd>{data.advisorTitle || "待填写"}</dd></div>
-            <div><dt>分析依据</dt><dd>家庭资料与保单初筛</dd></div>
+            <div><dt>检视范围</dt><dd>收支、资产、负债与保障</dd></div>
           </dl>
 
-          <section className="three-stage-report">
-            <div>
-              <small>第一阶段</small>
-              <strong>财务安全</strong>
-              <span>6 至 12 个月生活准备金与风险保障</span>
+          <section className="financial-pyramid-report">
+            <div
+              className="financial-pyramid-visual"
+              aria-label={`家庭当前位于${financialPosition.label}`}
+            >
+              <div className={`pyramid-layer freedom ${pyramidLayerState("freedom")}`}>
+                <strong>财务自由</strong>
+                <small>
+                  {financialPosition.key === "freedom" ? "家庭当前位置" : "最终目标"}
+                </small>
+              </div>
+              <div className={`pyramid-layer independence ${pyramidLayerState("independence")}`}>
+                <strong>财务独立</strong>
+                <small>
+                  {financialPosition.key === "independence" ? "家庭当前位置" : "持续结余"}
+                </small>
+              </div>
+              <div className={`pyramid-layer safety ${pyramidLayerState("safety")}`}>
+                <strong>财务安全</strong>
+                <small>
+                  {financialPosition.key === "safety" ? "家庭当前位置" : "稳固底座"}
+                </small>
+              </div>
             </div>
-            <div>
-              <small>第二阶段</small>
-              <strong>财务独立</strong>
-              <span>收入稳定覆盖支出，并持续形成结余</span>
-            </div>
-            <div>
-              <small>第三阶段</small>
-              <strong>财务自由</strong>
-              <span>非固定工资收入覆盖必要生活支出</span>
+            <div className="financial-pyramid-copy">
+              <span>家庭财务的三个层次</span>
+              <h2>先稳住底层，再走向更高层</h2>
+              <div className={financialPosition.key === "safety" ? "is-current" : ""}>
+                <strong>财务安全</strong>
+                <p>应急资金与基础保障能够承接疾病、停工、医疗和家庭责任，让正常生活不因风险中断。</p>
+              </div>
+              <div className={financialPosition.key === "independence" ? "is-current" : ""}>
+                <strong>财务独立</strong>
+                <p>稳定收入覆盖全部支出并持续形成结余，教育、养老和保障目标可以按计划积累。</p>
+              </div>
+              <div className={financialPosition.key === "freedom" ? "is-current" : ""}>
+                <strong>财务自由</strong>
+                <p>稳定的非工资收入覆盖必要生活支出，家庭不再依赖持续工作来维持生活。</p>
+              </div>
             </div>
           </section>
 
           <section className="cover-diagnosis">
             <div className={`diagnosis-risk ${householdRisk.tone}`}>
-              <span>家庭四级风险结果</span>
-              <strong>{householdRisk.level}</strong>
-              <small>基于当前已录入资料初筛</small>
+              <span>当前财务位置</span>
+              <strong>{financialPosition.label}</strong>
+              <small>上层目标建立在下层基础之上</small>
             </div>
             <div>
-              <span>本次核心判断</span>
-              <h2>{householdRisk.description}</h2>
-              <p>{data.reportSummary || "核心资料尚未完整，暂不形成正式综合判断。"}</p>
+              <span>家庭风险判断：{householdRisk.level}</span>
+              <h2>{financialPosition.description}</h2>
+              <p>{data.reportSummary || householdRisk.description}</p>
             </div>
           </section>
 
@@ -2609,13 +2824,13 @@ function ReportPage({
               <span>03</span><strong>资产与负债分析</strong><small>净资产、集中度与流动性</small>
             </div>
             <div>
-              <span>04</span><strong>九项财务指标</strong><small>公式、参考值与逐项判断</small>
+              <span>04</span><strong>财务安全指数</strong><small>九项指数与家庭影响</small>
             </div>
             <div>
-              <span>05</span><strong>目标、保单与规划</strong><small>保单初筛与专业建议</small>
+              <span>05</span><strong>目标、保障与规划</strong><small>保障配置与专业建议</small>
             </div>
           </section>
-          <ReportSheetFooter page={1} status={dataStatus} />
+          <ReportSheetFooter page={1} recipient={reportRecipient} />
         </article>
 
         <article className="report-sheet">
@@ -2667,7 +2882,7 @@ function ReportPage({
               </p>
             </div>
           </section>
-          <ReportSheetFooter page={2} status={dataStatus} />
+          <ReportSheetFooter page={2} recipient={reportRecipient} />
         </article>
 
         <article className="report-sheet">
@@ -2749,52 +2964,70 @@ function ReportPage({
               </p>
             </div>
           </section>
-          <ReportSheetFooter page={3} status={dataStatus} />
+          <ReportSheetFooter page={3} recipient={reportRecipient} />
         </article>
 
         <article className="report-sheet indicator-sheet">
           <ReportSheetHeader
-            section="04 / FINANCIAL RATIOS"
-            title="九项家庭财务指标分析"
-            subtitle="参考值用于识别讨论顺序，不等同于统一标准，也不替代具体风险评估。"
+            section="04 / FINANCIAL SECURITY INDEX"
+            title="家庭财务安全指数"
+            subtitle="九项指数呈现家庭从财务安全、财务独立到财务自由的基础与改善顺序。"
           />
           <section className={`indicator-summary ${householdRisk.tone}`}>
             <div className="indicator-risk-result">
               <span>家庭四级风险结果</span>
               <strong>{householdRisk.level}</strong>
-              <small>不使用家庭总分</small>
+              <small>当前财务位置：{financialPosition.label}</small>
             </div>
             <div>
               <p>
-                已对 {evaluatedIndicators.length} 项可计算指标进行逐项判断：
+                9 项财务安全指数中，
                 {indicators.filter((item) => item.tone === "good").length} 项达标，
                 {indicators.filter((item) => item.tone === "watch").length} 项关注，
-                {indicators.filter((item) => item.tone === "risk").length} 项优先改善。
+                {indicators.filter((item) => item.tone === "risk").length} 项优先改善
+                {evaluatedIndicators.length < indicators.length
+                  ? `，${indicators.length - evaluatedIndicators.length} 项需要进一步确认`
+                  : ""}
+                。
               </p>
               <small>{householdRisk.reasons.slice(0, 3).join("；")}。</small>
             </div>
           </section>
           <section className="indicator-table">
             <div className="indicator-head">
-              <span>阶段 / 指标</span>
+              <span>阶段</span>
+              <span>指标</span>
               <span>计算方式</span>
               <span>当前值</span>
               <span>参考值</span>
               <span>判断</span>
               <span>家庭影响</span>
             </div>
-            {indicators.map((indicator) => (
-              <div className="indicator-row" key={indicator.name}>
-                <span>
-                  <small>{indicator.group}</small>
-                  <strong>{indicator.name}</strong>
-                </span>
-                <span>{indicator.formula}</span>
-                <strong>{indicator.value}</strong>
-                <span>{indicator.ideal}</span>
-                <MetricStatus tone={indicator.tone} />
-                <p>{indicator.explanation}</p>
-              </div>
+            {indicatorGroups.map((group) => (
+              <section
+                className={`indicator-stage-group ${group.name === "财务安全" ? "safety" : group.name === "财务独立" ? "independence" : "freedom"}`}
+                key={group.name}
+              >
+                <div className="indicator-stage-label">
+                  <strong>{group.name}</strong>
+                  <span>{group.indicators.length} 项指数</span>
+                  <p>{group.description}</p>
+                </div>
+                <div className="indicator-stage-rows">
+                  {group.indicators.map((indicator) => (
+                    <div className="indicator-row" key={indicator.name}>
+                      <span>
+                        <strong>{indicator.name}</strong>
+                      </span>
+                      <span>{indicator.formula}</span>
+                      <strong>{indicator.value}</strong>
+                      <span>{indicator.ideal}</span>
+                      <MetricStatus tone={indicator.tone} />
+                      <p>{indicator.explanation}</p>
+                    </div>
+                  ))}
+                </div>
+              </section>
             ))}
           </section>
           <section className="ratio-note">
@@ -2804,13 +3037,13 @@ function ReportPage({
               须确认收入性质、税费、稳定性与可持续期限。
             </p>
           </section>
-          <ReportSheetFooter page={4} status={dataStatus} />
+          <ReportSheetFooter page={4} recipient={reportRecipient} />
         </article>
 
-        <article className="report-sheet">
+        <article className="report-sheet report-planning-sheet">
           <ReportSheetHeader
             section="05 / FAMILY PROTECTION"
-            title="家庭目标、保单初筛与规划建议"
+            title="家庭目标、保障配置与规划建议"
             subtitle="从家庭责任和现金流出发，判断风险由什么资金承接，再确定保障与长期目标的安排方向。"
           />
           <section className="family-profile-report">
@@ -2866,7 +3099,7 @@ function ReportPage({
           <section className="policy-report-section">
             <div className="policy-report-heading">
               <div>
-                <span>家庭保单初筛</span>
+                <span>家庭保障配置概览</span>
                 <h2>
                   {policyReview.configured}/{policyReview.applicable} 项已配置，
                   {policyReview.missing} 项明确缺口
@@ -2913,13 +3146,13 @@ function ReportPage({
               ))}
             </div>
             <div className={`medical-screening-result ${medicalReview.state}`}>
-              <span>医疗险初筛</span>
+              <span>医疗保障检视</span>
               <strong>
                 {medicalReview.state === "missing"
                   ? "发现明确缺口"
                   : medicalReview.state === "pending"
                     ? "资料待补充"
-                    : "已完成基础录入"}
+                    : "基础配置已明确"}
               </strong>
               <p>{medicalReview.description}</p>
               <small>
@@ -2970,12 +3203,12 @@ function ReportPage({
           <section className="report-legal-note">
             <ShieldCheck size={20} />
             <p>
-              本报告基于当前已填写资料生成，用于家庭财务状况整理与沟通，不构成收益承诺、
-              投资适当性结论、税务或法律意见，也不构成具体保险产品建议。正式方案应以家庭确认资料、
-              合同条款及专业人员复核为准。
+              本报告用于呈现家庭财务结构与保障规划方向，不构成收益承诺、投资适当性结论、
+              税务或法律意见，也不构成具体保险产品建议。具体保障方案应结合家庭责任、预算、
+              健康状况及合同条款进行确认。
             </p>
           </section>
-          <ReportSheetFooter page={5} status={dataStatus} />
+          <ReportSheetFooter page={5} recipient={reportRecipient} />
         </article>
       </div>
     </main>
