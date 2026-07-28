@@ -2277,25 +2277,25 @@ function ReportPage({
     ReturnType<typeof getPersonPolicySummary>
   >;
   const incomeLines: ReportLine[] = [
-    { label: "本人固定收入", value: data.selfIncome, color: "#2f6ddf" },
-    { label: "配偶固定收入", value: data.spouseIncome, color: "#78a4ef" },
-    { label: "其他收入", value: data.otherIncome, color: "#75a58d" },
+    { label: "本人固定收入", value: data.selfIncome, color: "#f28a00" },
+    { label: "配偶固定收入", value: data.spouseIncome, color: "#ffb341" },
+    { label: "其他收入", value: data.otherIncome, color: "#7f9a6a" },
   ];
   const expenseLines: ReportLine[] = [
-    { label: "日常生活", value: data.livingExpense, color: "#315f9d" },
-    { label: "子女教育", value: data.educationExpense, color: "#6f90c8" },
-    { label: "父母赡养", value: data.parentExpense, color: "#9ab1d4" },
-    { label: "债务偿还", value: data.debtService, color: "#c69252" },
-    { label: "储蓄理财", value: data.savingExpense, color: "#6d9b83" },
-    { label: "投资投入", value: data.investmentExpense, color: "#90b39f" },
-    { label: "保障型保费", value: data.insuranceExpense, color: "#a2719a" },
-    { label: "其他支出", value: data.otherExpense, color: "#a5adb8" },
+    { label: "日常生活", value: data.livingExpense, color: "#e56f1f" },
+    { label: "子女教育", value: data.educationExpense, color: "#f59e0b" },
+    { label: "父母赡养", value: data.parentExpense, color: "#f6bd60" },
+    { label: "债务偿还", value: data.debtService, color: "#9a5c32" },
+    { label: "储蓄理财", value: data.savingExpense, color: "#7f9a6a" },
+    { label: "投资投入", value: data.investmentExpense, color: "#a2b58d" },
+    { label: "保障型保费", value: data.insuranceExpense, color: "#d8837c" },
+    { label: "其他支出", value: data.otherExpense, color: "#a8a29e" },
   ];
   const assetLines: ReportLine[] = [
-    { label: "随时可用资金", value: data.cashAssets, color: "#2f6ddf" },
-    { label: "自住及使用资产", value: data.homeAssets, color: "#73a1eb" },
-    { label: "投资理财资产", value: data.investmentAssets, color: "#6fa289" },
-    { label: "保单现金价值", value: data.policyCashValue, color: "#c28b45" },
+    { label: "随时可用资金", value: data.cashAssets, color: "#f28a00" },
+    { label: "自住及使用资产", value: data.homeAssets, color: "#f6b13e" },
+    { label: "投资理财资产", value: data.investmentAssets, color: "#7f9a6a" },
+    { label: "保单现金价值", value: data.policyCashValue, color: "#d97a35" },
   ];
 
   const hasIncome = metrics.income > 0;
