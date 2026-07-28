@@ -49,7 +49,100 @@ type StepId =
 type ViewMode = "form" | "report";
 type SaveStatus = "saved" | "saving";
 type ExportStatus = "idle" | "exporting";
-const CALCULATION_VERSION = "MVP 0.2";
+const CALCULATION_VERSION = "MVP 0.3";
+
+const policyPeople = [
+  { id: "self", label: "本人", role: "主要收入来源者" },
+  { id: "spouse", label: "配偶", role: "共同收入与家庭责任" },
+  { id: "child", label: "子女", role: "医疗与成长责任" },
+  { id: "parents", label: "父母", role: "赡养与照护责任" },
+] as const;
+
+const policyTypes = [
+  { id: "medical", label: "医疗险", helper: "住院医疗与大额医疗费用" },
+  { id: "critical", label: "重疾险", helper: "重大疾病后的收入与康复支出" },
+  { id: "life", label: "寿险", helper: "身故责任与家庭债务延续" },
+  { id: "accident", label: "意外险", helper: "意外伤害、医疗与身故责任" },
+  { id: "annuity", label: "养老年金", helper: "养老现金流与长期收入准备" },
+] as const;
+
+const policyStatuses = [
+  "保单完整",
+  "部分保单",
+  "待核对",
+  "未配置",
+  "不适用",
+] as const;
+
+type PolicyPersonId = (typeof policyPeople)[number]["id"];
+type PolicyTypeId = (typeof policyTypes)[number]["id"];
+type PolicyStatus = (typeof policyStatuses)[number];
+type PolicyCoverage = Record<
+  PolicyPersonId,
+  Record<PolicyTypeId, PolicyStatus>
+>;
+
+const defaultPolicyCoverage: PolicyCoverage = {
+  self: {
+    medical: "保单完整",
+    critical: "保单完整",
+    life: "部分保单",
+    accident: "保单完整",
+    annuity: "待核对",
+  },
+  spouse: {
+    medical: "保单完整",
+    critical: "部分保单",
+    life: "待核对",
+    accident: "保单完整",
+    annuity: "待核对",
+  },
+  child: {
+    medical: "保单完整",
+    critical: "部分保单",
+    life: "不适用",
+    accident: "保单完整",
+    annuity: "不适用",
+  },
+  parents: {
+    medical: "部分保单",
+    critical: "待核对",
+    life: "不适用",
+    accident: "保单完整",
+    annuity: "部分保单",
+  },
+};
+
+const emptyPolicyCoverage: PolicyCoverage = {
+  self: {
+    medical: "待核对",
+    critical: "待核对",
+    life: "待核对",
+    accident: "待核对",
+    annuity: "待核对",
+  },
+  spouse: {
+    medical: "待核对",
+    critical: "待核对",
+    life: "待核对",
+    accident: "待核对",
+    annuity: "待核对",
+  },
+  child: {
+    medical: "待核对",
+    critical: "待核对",
+    life: "不适用",
+    accident: "待核对",
+    annuity: "不适用",
+  },
+  parents: {
+    medical: "待核对",
+    critical: "待核对",
+    life: "不适用",
+    accident: "待核对",
+    annuity: "待核对",
+  },
+};
 
 type PlannerData = {
   householdName: string;
@@ -80,9 +173,7 @@ type PlannerData = {
   policyCashValue: number;
   totalDebt: number;
   debtType: string;
-  selfProtection: string;
-  spouseProtection: string;
-  childProtection: string;
+  policyCoverage: PolicyCoverage;
   educationGoal: string;
   retirementGoal: string;
   priorityGoal: string;
@@ -122,9 +213,7 @@ const defaultData: PlannerData = {
   policyCashValue: 32,
   totalDebt: 242,
   debtType: "房贷",
-  selfProtection: "需要核对",
-  spouseProtection: "部分覆盖",
-  childProtection: "已覆盖",
+  policyCoverage: defaultPolicyCoverage,
   educationGoal: "本科国内",
   retirementGoal: "60岁退休",
   priorityGoal: "家庭保障",
@@ -162,9 +251,7 @@ const emptyData: PlannerData = {
   policyCashValue: 0,
   totalDebt: 0,
   debtType: "无负债",
-  selfProtection: "资料不足",
-  spouseProtection: "资料不足",
-  childProtection: "资料不足",
+  policyCoverage: emptyPolicyCoverage,
   educationGoal: "暂未确定",
   retirementGoal: "暂未确定",
   priorityGoal: "家庭保障",
@@ -201,8 +288,8 @@ const steps: Array<{
   },
   {
     id: "protection",
-    label: "保障现状",
-    helper: "已有保障",
+    label: "家庭保单",
+    helper: "成员 × 险种",
     icon: ShieldCheck,
   },
   {
@@ -259,12 +346,157 @@ function getAssetInsight(metrics: ReturnType<typeof getMetricsShape>) {
   return `资产结构相对均衡，现金类资产可覆盖约 ${metrics.emergencyMonths.toFixed(1)} 个月必要支出。`;
 }
 
+function clonePolicyCoverage(source: PolicyCoverage): PolicyCoverage {
+  return {
+    self: { ...source.self },
+    spouse: { ...source.spouse },
+    child: { ...source.child },
+    parents: { ...source.parents },
+  };
+}
+
+function getActivePolicyPeople(data: PlannerData) {
+  return policyPeople.filter(
+    (person) =>
+      person.id === "self" ||
+      person.id === "spouse" ||
+      (person.id === "child" && data.childrenCount > 0) ||
+      (person.id === "parents" && data.parentSupportCount > 0),
+  );
+}
+
+function getPolicyStatusClass(status: PolicyStatus) {
+  const classes: Record<PolicyStatus, string> = {
+    保单完整: "complete",
+    部分保单: "partial",
+    待核对: "pending",
+    未配置: "missing",
+    不适用: "not-applicable",
+  };
+  return classes[status];
+}
+
+function getPolicyReview(data: PlannerData) {
+  const people = getActivePolicyPeople(data);
+  const cells = people.flatMap((person) =>
+    policyTypes.map((policyType) => ({
+      person: person.id,
+      type: policyType.id,
+      status: data.policyCoverage[person.id][policyType.id],
+    })),
+  );
+  const applicable = cells.filter((cell) => cell.status !== "不适用");
+
+  return {
+    people,
+    applicable: applicable.length,
+    complete: applicable.filter((cell) => cell.status === "保单完整").length,
+    partial: applicable.filter((cell) => cell.status === "部分保单").length,
+    pending: applicable.filter((cell) => cell.status === "待核对").length,
+    missing: applicable.filter((cell) => cell.status === "未配置").length,
+  };
+}
+
+function getPersonPolicySummary(data: PlannerData, personId: PolicyPersonId) {
+  const entries = policyTypes
+    .map((policyType) => ({
+      policyType,
+      status: data.policyCoverage[personId][policyType.id],
+    }))
+    .filter((entry) => entry.status !== "不适用");
+  const complete = entries.filter((entry) => entry.status === "保单完整").length;
+  const missing = entries.filter((entry) => entry.status === "未配置");
+  const unresolved = entries.filter((entry) => entry.status !== "保单完整");
+  const label =
+    entries.length === 0
+      ? "暂无适用项目"
+      : complete === entries.length
+        ? `${complete}/${entries.length} 项资料完整`
+        : missing.length > 0
+          ? `${complete}/${entries.length} 项完整，${missing.length} 项未配置`
+          : `${complete}/${entries.length} 项资料完整`;
+
+  return {
+    applicable: entries.length,
+    complete,
+    missing,
+    unresolved,
+    label,
+  };
+}
+
+function normalizePolicyCoverage(
+  candidate: unknown,
+  fallback = defaultPolicyCoverage,
+) {
+  const normalized = clonePolicyCoverage(fallback);
+  if (!candidate || typeof candidate !== "object") return normalized;
+
+  policyPeople.forEach((person) => {
+    const personValue = (candidate as Record<string, unknown>)[person.id];
+    if (!personValue || typeof personValue !== "object") return;
+    policyTypes.forEach((policyType) => {
+      const status = (personValue as Record<string, unknown>)[policyType.id];
+      if (
+        typeof status === "string" &&
+        policyStatuses.includes(status as PolicyStatus)
+      ) {
+        normalized[person.id][policyType.id] = status as PolicyStatus;
+      }
+    });
+  });
+  return normalized;
+}
+
 function loadInitialData() {
   try {
     const stored = localStorage.getItem("family-finance-planner-draft");
-    return stored ? ({ ...defaultData, ...JSON.parse(stored) } as PlannerData) : defaultData;
+    if (!stored) {
+      return {
+        ...defaultData,
+        policyCoverage: clonePolicyCoverage(defaultPolicyCoverage),
+      };
+    }
+    const parsed = JSON.parse(stored) as Partial<PlannerData> & {
+      selfProtection?: string;
+      spouseProtection?: string;
+      childProtection?: string;
+    };
+    const legacyMap: Record<string, PolicyStatus> = {
+      已覆盖: "保单完整",
+      部分覆盖: "部分保单",
+      需要核对: "待核对",
+      资料不足: "待核对",
+    };
+    const policyCoverage = normalizePolicyCoverage(parsed.policyCoverage);
+
+    if (!parsed.policyCoverage) {
+      (
+        [
+          ["self", parsed.selfProtection],
+          ["spouse", parsed.spouseProtection],
+          ["child", parsed.childProtection],
+        ] as Array<[PolicyPersonId, string | undefined]>
+      ).forEach(([person, legacyStatus]) => {
+        if (!legacyStatus || !legacyMap[legacyStatus]) return;
+        policyTypes.forEach((policyType) => {
+          if (policyCoverage[person][policyType.id] !== "不适用") {
+            policyCoverage[person][policyType.id] = legacyMap[legacyStatus];
+          }
+        });
+      });
+    }
+
+    return {
+      ...defaultData,
+      ...parsed,
+      policyCoverage,
+    } as PlannerData;
   } catch {
-    return defaultData;
+    return {
+      ...defaultData,
+      policyCoverage: clonePolicyCoverage(defaultPolicyCoverage),
+    };
   }
 }
 
@@ -356,6 +588,23 @@ export function App() {
     setData((current) => ({ ...current, [key]: value }));
   };
 
+  const updatePolicyCoverage = (
+    person: PolicyPersonId,
+    policyType: PolicyTypeId,
+    status: PolicyStatus,
+  ) => {
+    setData((current) => ({
+      ...current,
+      policyCoverage: {
+        ...current.policyCoverage,
+        [person]: {
+          ...current.policyCoverage[person],
+          [policyType]: status,
+        },
+      },
+    }));
+  };
+
   const stepIndex = steps.findIndex((step) => step.id === activeStep);
   const progress = Math.round(((stepIndex + 1) / steps.length) * 100);
 
@@ -391,7 +640,10 @@ export function App() {
           );
           if (!shouldReset) return;
           localStorage.removeItem("family-finance-planner-draft");
-          setData(emptyData);
+          setData({
+            ...emptyData,
+            policyCoverage: clonePolicyCoverage(emptyPolicyCoverage),
+          });
           setActiveStep("family");
           setViewMode("form");
         }}
@@ -432,6 +684,7 @@ export function App() {
               data={data}
               metrics={metrics}
               update={update}
+              updatePolicyCoverage={updatePolicyCoverage}
             />
             <div className="form-actions">
               <button
@@ -618,7 +871,7 @@ function StepHeader({
     family: "先记录家庭成员和决策关系，金额可以稍后补充。",
     cashflow: "按税后年度口径填写。记不清时先用预选项，再补数字。",
     balance: "家庭资产和企业资产分开记录，只填写当前可确认价值。",
-    protection: "先看谁承担家庭责任，再核对已有保障是否匹配。",
+    protection: "按家庭成员和险种逐项盘点，先确认保单资料是否完整。",
     goals: "把教育和养老目标放到时间轴里，避免只看眼前支出。",
     risk: "分开判断风险意愿和真实承受能力，冲突时保留待确认。",
     report: "系统将已确认资料整理成可讲解的家庭财务报告。",
@@ -827,11 +1080,17 @@ function StepForm({
   data,
   metrics,
   update,
+  updatePolicyCoverage,
 }: {
   step: StepId;
   data: PlannerData;
   metrics: ReturnType<typeof getMetricsShape>;
   update: <K extends keyof PlannerData>(key: K, value: PlannerData[K]) => void;
+  updatePolicyCoverage: (
+    person: PolicyPersonId,
+    policyType: PolicyTypeId,
+    status: PolicyStatus,
+  ) => void;
 }) {
   if (step === "family") {
     return (
@@ -1108,39 +1367,43 @@ function StepForm({
   }
 
   if (step === "protection") {
+    const policyReview = getPolicyReview(data);
     return (
       <div className="form-content">
         <section className="form-section">
           <SectionTitle
             icon={<ShieldCheck size={22} />}
-            title="家庭保障地图"
-            description="先判断覆盖状态，详细保额在保单核对后补充。"
+            title="家庭保单盘点"
+            description="按家庭成员和险种逐项记录保单资料状态。"
           />
-          <div className="protection-matrix">
-            <ProtectionRow
-              person="本人"
-              role="主要收入来源者"
-              value={data.selfProtection}
-              onChange={(value) => update("selfProtection", value)}
-            />
-            <ProtectionRow
-              person="配偶"
-              role="共同收入与家庭责任"
-              value={data.spouseProtection}
-              onChange={(value) => update("spouseProtection", value)}
-            />
-            <ProtectionRow
-              person="子女"
-              role="医疗与意外保障"
-              value={data.childProtection}
-              onChange={(value) => update("childProtection", value)}
-            />
+          <div className="policy-review-summary" aria-label="家庭保单盘点摘要">
+            <div>
+              <span>适用项目</span>
+              <strong>{policyReview.applicable}</strong>
+              <small>已排除不适用险种</small>
+            </div>
+            <div className="complete">
+              <span>资料完整</span>
+              <strong>{policyReview.complete}</strong>
+              <small>已录入并完成核对</small>
+            </div>
+            <div className="attention">
+              <span>需要处理</span>
+              <strong>{policyReview.applicable - policyReview.complete}</strong>
+              <small>部分、待核对或未配置</small>
+            </div>
           </div>
+          <PolicyCoverageMatrix
+            data={data}
+            onChange={updatePolicyCoverage}
+          />
           <div className="guidance-note">
             <Info size={19} />
             <span>
-              <strong>当前只做责任核对</strong>
-              <small>不在资料填写阶段推荐具体保险产品。</small>
+              <strong>“保单完整”不等于“保障充足”</strong>
+              <small>
+                本页只确认保单资料是否已收集并核对，保额、期限、责任和除外事项仍需顾问专业检视。
+              </small>
             </span>
           </div>
         </section>
@@ -1267,34 +1530,80 @@ function getMetricsShape() {
   };
 }
 
-function ProtectionRow({
-  person,
-  role,
-  value,
+function PolicyCoverageMatrix({
+  data,
   onChange,
 }: {
-  person: string;
-  role: string;
-  value: string;
-  onChange: (value: string) => void;
+  data: PlannerData;
+  onChange: (
+    person: PolicyPersonId,
+    policyType: PolicyTypeId,
+    status: PolicyStatus,
+  ) => void;
 }) {
-  const options = ["已覆盖", "部分覆盖", "需要核对", "资料不足"];
+  const people = getActivePolicyPeople(data);
+  const matrixColumns = {
+    gridTemplateColumns: `minmax(190px, 1.35fr) repeat(${people.length}, minmax(132px, 1fr))`,
+  };
+
   return (
-    <div className="protection-row">
-      <span className="person-copy">
-        <strong>{person}</strong>
-        <small>{role}</small>
-      </span>
-      <div className="mini-choices">
-        {options.map((option) => (
-          <button
-            key={option}
-            type="button"
-            className={value === option ? "selected" : ""}
-            onClick={() => onChange(option)}
+    <div className="policy-matrix-scroll">
+      <div
+        className="policy-coverage-matrix"
+        role="table"
+        aria-label="家庭成员与险种保单状态"
+      >
+        <div className="policy-matrix-head" role="row" style={matrixColumns}>
+          <span role="columnheader">险种与责任</span>
+          {people.map((person) => (
+            <span role="columnheader" key={person.id}>
+              <strong>{person.label}</strong>
+              <small>{person.role}</small>
+            </span>
+          ))}
+        </div>
+        {policyTypes.map((policyType) => (
+          <div
+            className="policy-matrix-row"
+            role="row"
+            style={matrixColumns}
+            key={policyType.id}
           >
-            {option}
-          </button>
+            <span className="policy-type-copy" role="rowheader">
+              <strong>{policyType.label}</strong>
+              <small>{policyType.helper}</small>
+            </span>
+            {people.map((person) => {
+              const status = data.policyCoverage[person.id][policyType.id];
+              return (
+                <label
+                  className={`policy-status-select ${getPolicyStatusClass(status)}`}
+                  key={person.id}
+                >
+                  <span className="visually-hidden">
+                    {person.label}{policyType.label}保单状态
+                  </span>
+                  <select
+                    aria-label={`${person.label}${policyType.label}保单状态`}
+                    value={status}
+                    onChange={(event) =>
+                      onChange(
+                        person.id,
+                        policyType.id,
+                        event.target.value as PolicyStatus,
+                      )
+                    }
+                  >
+                    {policyStatuses.map((option) => (
+                      <option value={option} key={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              );
+            })}
+          </div>
         ))}
       </div>
     </div>
@@ -1616,6 +1925,16 @@ function ReportPage({
   const reportRef = useRef<HTMLDivElement>(null);
   const [exportStatus, setExportStatus] = useState<ExportStatus>("idle");
   const dataStatus = data.dataConfirmed ? "家庭已确认" : "顾问填写草稿";
+  const policyReview = getPolicyReview(data);
+  const policySummaries = Object.fromEntries(
+    policyPeople.map((person) => [
+      person.id,
+      getPersonPolicySummary(data, person.id),
+    ]),
+  ) as Record<
+    PolicyPersonId,
+    ReturnType<typeof getPersonPolicySummary>
+  >;
   const statusCopy =
     metrics.income === 0 && metrics.assets === 0
       ? "核心资料尚待补充"
@@ -1816,8 +2135,18 @@ function ReportPage({
   if (metrics.emergencyMonths < 6) {
     priorities.push("把应急资金逐步补足至 6 个月必要支出");
   }
-  if (data.selfProtection !== "已覆盖" || data.spouseProtection !== "已覆盖") {
-    priorities.push("核对主要收入来源者的身故、重疾、医疗与保障期限");
+  const adultPolicyTypesToReview = policyTypes.filter(
+    (policyType) =>
+      data.policyCoverage.self[policyType.id] !== "保单完整" ||
+      data.policyCoverage.spouse[policyType.id] !== "保单完整",
+  );
+  if (adultPolicyTypesToReview.length > 0) {
+    priorities.push(
+      `核对主要收入来源者的${adultPolicyTypesToReview
+        .slice(0, 3)
+        .map((policyType) => policyType.label)
+        .join("、")}保单资料`,
+    );
   }
   if (metrics.homeRatio > 60) {
     priorities.push("降低资产过度集中带来的流动性压力");
@@ -1952,7 +2281,7 @@ function ReportPage({
               <span>04</span><strong>九项财务指标</strong><small>公式、参考值与逐项判断</small>
             </div>
             <div>
-              <span>05</span><strong>目标保障与执行</strong><small>责任地图与 30 天行动</small>
+              <span>05</span><strong>目标、保单与执行</strong><small>保单盘点与 30 天行动</small>
             </div>
           </section>
           <ReportSheetFooter page={1} status={dataStatus} />
@@ -2144,29 +2473,37 @@ function ReportPage({
         <article className="report-sheet">
           <ReportSheetHeader
             section="05 / GOALS & ACTIONS"
-            title="家庭目标、保障责任与执行建议"
+            title="家庭目标、保单盘点与执行建议"
             subtitle="把数据结论转化为家庭能够理解、能够确认、能够执行的下一步。"
           />
           <section className="family-profile-report">
             <div>
               <span>本人</span>
               <strong>{data.selfAge || "待补充"} 岁</strong>
-              <small>{data.selfProtection}</small>
+              <small>{policySummaries.self.label}</small>
             </div>
             <div>
               <span>配偶</span>
               <strong>{data.spouseAge || "待补充"} 岁</strong>
-              <small>{data.spouseProtection}</small>
+              <small>{policySummaries.spouse.label}</small>
             </div>
             <div>
               <span>子女</span>
               <strong>{data.childrenCount} 人</strong>
-              <small>{data.childrenCount > 0 ? `最小 ${data.youngestChildAge} 岁` : "暂无记录"}</small>
+              <small>
+                {data.childrenCount > 0
+                  ? policySummaries.child.label
+                  : "暂无规划成员"}
+              </small>
             </div>
             <div>
               <span>赡养父母</span>
               <strong>{data.parentSupportCount} 人</strong>
-              <small>长期责任需持续复核</small>
+              <small>
+                {data.parentSupportCount > 0
+                  ? policySummaries.parents.label
+                  : "暂无规划成员"}
+              </small>
             </div>
           </section>
           <section className="goal-report-grid">
@@ -2189,34 +2526,51 @@ function ReportPage({
               <p>目标排序由家庭确认，产品与工具应在目标之后讨论。</p>
             </div>
           </section>
-          <section className="responsibility-report detailed">
-            <div className="responsibility-heading">
-              <span>家庭责任地图</span>
-              <h2>先保护承担责任的人</h2>
-              <p>覆盖状态是初步记录，不代表保额、期限和责任已经充分。</p>
+          <section className="policy-report-section">
+            <div className="policy-report-heading">
+              <div>
+                <span>家庭保单盘点</span>
+                <h2>{policyReview.complete}/{policyReview.applicable} 项保单资料完整</h2>
+              </div>
+              <p>
+                “完整”表示资料已录入并核对，不代表保障责任、保额与期限已经充分。
+              </p>
             </div>
-            <div className="responsibility-flow">
-              <ResponsibilityCard
-                icon={<IdentificationCard size={27} />}
-                person="本人"
-                role="主要收入来源者"
-                status={data.selfProtection}
-                action="核对身故、重疾、医疗和保障期限"
-              />
-              <ResponsibilityCard
-                icon={<UsersThree size={27} />}
-                person="配偶"
-                role="共同收入与家庭责任"
-                status={data.spouseProtection}
-                action="确认责任分工、已有保额和预算"
-              />
-              <ResponsibilityCard
-                icon={<GraduationCap size={27} />}
-                person={data.childrenCount > 0 ? `子女 · ${data.childrenCount}人` : "子女"}
-                role={data.educationGoal}
-                status={data.childProtection}
-                action="核对医疗保障与教育目标准备"
-              />
+            <div className="policy-report-table">
+              <div
+                className="policy-report-row policy-report-head"
+                style={{
+                  gridTemplateColumns: `150px repeat(${policyReview.people.length}, minmax(0, 1fr))`,
+                }}
+              >
+                <span>险种</span>
+                {policyReview.people.map((person) => (
+                  <strong key={person.id}>{person.label}</strong>
+                ))}
+              </div>
+              {policyTypes.map((policyType) => (
+                <div
+                  className="policy-report-row"
+                  style={{
+                    gridTemplateColumns: `150px repeat(${policyReview.people.length}, minmax(0, 1fr))`,
+                  }}
+                  key={policyType.id}
+                >
+                  <strong>{policyType.label}</strong>
+                  {policyReview.people.map((person) => {
+                    const status =
+                      data.policyCoverage[person.id][policyType.id];
+                    return (
+                      <span
+                        className={getPolicyStatusClass(status)}
+                        key={person.id}
+                      >
+                        {status}
+                      </span>
+                    );
+                  })}
+                </div>
+              ))}
             </div>
           </section>
           <section className="action-plan-report">
@@ -2258,33 +2612,5 @@ function ReportPage({
         </article>
       </div>
     </main>
-  );
-}
-
-function ResponsibilityCard({
-  icon,
-  person,
-  role,
-  status,
-  action,
-}: {
-  icon: ReactNode;
-  person: string;
-  role: string;
-  status: string;
-  action: string;
-}) {
-  return (
-    <div className="responsibility-card">
-      <span className="responsibility-icon">{icon}</span>
-      <div>
-        <span className="person-line">
-          <strong>{person}</strong>
-          <small>{status}</small>
-        </span>
-        <p>{role}</p>
-        <span className="responsibility-action">{action}</span>
-      </div>
-    </div>
   );
 }
