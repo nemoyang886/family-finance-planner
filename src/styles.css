@@ -2296,8 +2296,8 @@ button:active {
 
 .cover-diagnosis > div:last-child > span,
 .advisor-analysis > span,
-.action-plan-title > span,
-.final-advisor-note span {
+.planning-direction-title > span,
+.professional-report-summary span {
   color: var(--accent);
   font-size: 12px;
   font-weight: 750;
@@ -3154,64 +3154,78 @@ button:active {
   grid-column: 2 / -1;
 }
 
-.action-plan-report {
-  display: grid;
-  grid-template-columns: 0.72fr 1.28fr;
-  gap: 24px;
+.planning-direction-report {
   margin-top: 18px;
-  padding: 26px;
+  padding: 28px;
   border-radius: 16px;
   color: #f8fbff;
   background: #a64f08;
 }
 
-.action-plan-title h2 {
-  margin: 8px 0 0;
-  font-size: 26px;
+.planning-direction-title {
+  display: grid;
+  grid-template-columns: 190px 1fr;
+  gap: 6px 28px;
+  align-items: start;
 }
 
-.action-plan-title > span {
+.planning-direction-title > span {
+  grid-row: 1 / 3;
   color: #ffe0bd;
 }
 
-.action-plan-report ol {
-  display: grid;
-  gap: 9px;
+.planning-direction-title h2 {
   margin: 0;
-  padding: 0;
-  list-style: none;
+  font-size: 26px;
+  line-height: 1.3;
 }
 
-.action-plan-report li {
+.planning-direction-title p {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.planning-direction-list {
   display: grid;
-  grid-template-columns: 28px 1fr;
-  align-items: center;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
-  padding: 12px 14px;
-  border-radius: 10px;
+  margin-top: 20px;
+}
+
+.planning-direction-list article {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-height: 176px;
+  padding: 17px 18px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
   background: rgba(255, 255, 255, 0.09);
 }
 
-.action-plan-report li span {
-  display: grid;
-  width: 25px;
-  height: 25px;
-  place-items: center;
-  border-radius: 8px;
-  color: #a64f08;
-  background: #f8fbff;
-  font-size: 11px;
-  font-weight: 800;
+.planning-direction-list article > span {
+  color: #ffe0bd;
+  font-size: 12px;
+  font-weight: 750;
 }
 
-.action-plan-report li strong {
-  font-size: 13px;
-  line-height: 1.55;
+.planning-direction-list article strong {
+  font-size: 15px;
+  line-height: 1.45;
 }
 
-.final-advisor-note {
+.planning-direction-list article p {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.professional-report-summary {
   display: grid;
-  grid-template-columns: 1.2fr 0.8fr;
+  grid-template-columns: 1.35fr 0.65fr;
   gap: 1px;
   margin-top: 18px;
   overflow: hidden;
@@ -3220,28 +3234,40 @@ button:active {
   background: var(--line);
 }
 
-.final-advisor-note > div {
+.professional-report-summary > div {
   display: grid;
   align-content: start;
   gap: 8px;
-  padding: 20px 22px;
+  padding: 22px 24px;
   background: var(--surface);
 }
 
-.final-advisor-note p {
+.professional-summary-copy h2 {
+  margin: 2px 0 4px;
+  font-size: 20px;
+  line-height: 1.4;
+}
+
+.professional-report-summary p {
   margin: 0;
   color: var(--muted);
   font-size: 13px;
   line-height: 1.75;
 }
 
-.final-advisor-note strong {
+.professional-report-summary strong {
   font-size: 16px;
+  line-height: 1.55;
 }
 
-.final-advisor-note small {
+.professional-report-summary small {
   color: var(--muted);
   font-size: 12px;
+  line-height: 1.65;
+}
+
+.professional-report-summary .professional-next-review {
+  background: var(--accent-soft);
 }
 
 .report-legal-note {
@@ -3538,7 +3564,8 @@ button:active {
   .balance-detail-grid,
   .family-profile-report,
   .goal-report-grid,
-  .final-advisor-note {
+  .professional-report-summary,
+  .planning-direction-list {
     grid-template-columns: 1fr;
   }
 
@@ -3548,9 +3575,16 @@ button:active {
 
   .cover-diagnosis,
   .sheet-header,
-  .advisor-analysis,
-  .action-plan-report {
+  .advisor-analysis {
     grid-template-columns: 1fr;
+  }
+
+  .planning-direction-title {
+    grid-template-columns: 1fr;
+  }
+
+  .planning-direction-title > span {
+    grid-row: auto;
   }
 
   .sheet-header {
@@ -3604,7 +3638,7 @@ button:active {
     grid-template-columns: 100px 1fr;
   }
 
-  .action-plan-report {
+  .planning-direction-report {
     gap: 18px;
   }
 

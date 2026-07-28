@@ -49,7 +49,6 @@ type StepId =
 type ViewMode = "form" | "report";
 type SaveStatus = "saved" | "saving";
 type ExportStatus = "idle" | "exporting";
-const CALCULATION_VERSION = "MVP 0.4";
 
 const policyPeople = [
   { id: "self", label: "本人", role: "主要收入来源者" },
@@ -260,8 +259,8 @@ const defaultData: PlannerData = {
   riskPreference: "稳健",
   liquidityNeed: "6-12个月",
   reportSummary:
-    "家庭现金流保持结余，但资产集中于房产。建议优先核对可动用资金和家庭主要收入来源者的保障责任。",
-  nextAction: "核对现有保单，再确认家庭责任缺口",
+    "家庭现金流保持结余，但资产集中于房产，可随时使用的资金缓冲仍需加强。家庭主要收入来源者承担房贷、子女教育和赡养责任，建议进一步核实现有保障能否覆盖医疗费用、重大疾病后的收入中断及身故责任。",
+  nextAction: "完成完整保单检视，确认医疗、重疾和寿险责任是否覆盖家庭需要",
   dataConfirmed: false,
 };
 
@@ -347,7 +346,7 @@ const steps: Array<{
   {
     id: "report",
     label: "报告预览",
-    helper: "图表与讲解",
+    helper: "图表与专业解读",
     icon: FileText,
   },
 ];
@@ -378,7 +377,7 @@ function getAssetInsight(metrics: ReturnType<typeof getMetricsShape>) {
     return "资产资料尚未填写，完成录入后再判断流动性和集中度。";
   }
   if (metrics.homeRatio > 60) {
-    return `房产占比 ${metrics.homeRatio.toFixed(1)}%，资产集中度较高。讲解时应先讨论流动性，不直接给出产品结论。`;
+    return `房产占比 ${metrics.homeRatio.toFixed(1)}%，资产集中度较高。家庭账面资产较充足，但短期需要资金时，房产通常难以快速变现。`;
   }
   if (metrics.emergencyMonths < 6) {
     return `资产结构相对分散，但现金类资产仅覆盖约 ${metrics.emergencyMonths.toFixed(1)} 个月必要支出。`;
@@ -1667,14 +1666,14 @@ function StepForm({
           />
           <div className="advisor-notes-grid">
             <NotesField
-              label="顾问综合判断"
-              helper="这段文字会出现在报告首页，可根据面谈情况修改。"
+              label="客户报告综合解读"
+              helper="用客户容易理解的语言说明数据对家庭责任的影响。"
               value={data.reportSummary}
               onChange={(value) => update("reportSummary", value)}
             />
             <NotesField
-              label="建议的下一步"
-              helper="只写核对或行动安排，不在这里填写产品承诺。"
+              label="建议重点核实事项"
+              helper="写清需要补充的资料或需要进一步确认的保障责任。"
               value={data.nextAction}
               onChange={(value) => update("nextAction", value)}
             />
@@ -1688,7 +1687,7 @@ function StepForm({
             <span>
               <strong>以上核心资料已与家庭确认</strong>
               <small>
-                勾选后报告会标记为“已确认资料”；未勾选时始终显示为顾问草稿。
+                勾选后报告会标记为“家庭资料已确认”；未勾选时显示“家庭资料待确认”。
               </small>
             </span>
           </label>
@@ -2007,8 +2006,8 @@ function LiveReport({
       <section className="next-action">
         <ListChecks size={21} />
         <span>
-          <small>建议下一步</small>
-          <strong>{data.nextAction || "请填写建议的下一步"}</strong>
+          <small>建议重点核实</small>
+          <strong>{data.nextAction || "请填写建议重点核实事项"}</strong>
         </span>
         <ArrowRight size={17} />
       </section>
@@ -2246,7 +2245,7 @@ function getHouseholdRiskResult(
     level = "结构稳健";
     tone = "good";
     reasons = ["当前已录入项目未发现明显结构性缺口"];
-    description = "当前资料范围内结构相对稳健，仍需顾问定期复核。";
+    description = "当前资料范围内结构相对稳健，建议在家庭责任变化时重新检视。";
   }
 
   return { level, tone, description, reasons };
@@ -2263,7 +2262,7 @@ function ReportPage({
 }) {
   const reportRef = useRef<HTMLDivElement>(null);
   const [exportStatus, setExportStatus] = useState<ExportStatus>("idle");
-  const dataStatus = data.dataConfirmed ? "家庭已确认" : "顾问填写草稿";
+  const dataStatus = data.dataConfirmed ? "家庭资料已确认" : "家庭资料待确认";
   const policyReview = getPolicyReview(data);
   const medicalReview = getPolicyTypeReview(data, "medical");
   const householdRisk = getHouseholdRiskResult(data, metrics);
@@ -2314,8 +2313,7 @@ function ReportPage({
           : metrics.essentialExpenseRatio < 65
             ? "watch"
             : "risk",
-      explanation:
-        "衡量基本生活、教育和赡养对收入的占用。比率越低，家庭调整空间越充足。",
+      explanation: `每 100 元收入中约有 ${metrics.essentialExpenseRatio.toFixed(1)} 元用于基本生活、教育和赡养。必须支出占用越低，家庭应对收入波动的空间越充足。`,
     },
     {
       group: "财务安全",
@@ -2331,7 +2329,7 @@ function ReportPage({
             ? "watch"
             : "risk",
       explanation:
-        "反映家庭是否持续为风险保障安排预算。最终仍需结合责任、保额和保障期限判断。",
+        "保费占比只反映预算投入，不能直接证明保障是否充足。还需核对医疗报销边界、重疾后的收入补偿，以及寿险对负债和家庭责任的覆盖。",
     },
     {
       group: "财务安全",
@@ -2347,7 +2345,7 @@ function ReportPage({
             : metrics.cashCoverageRatio >= 25
               ? "watch"
               : "risk",
-      explanation: `目前可覆盖约 ${metrics.emergencyMonths.toFixed(1)} 个月必要支出，参考目标为 6 至 12 个月。`,
+      explanation: `现有可动用资金约能维持 ${metrics.emergencyMonths.toFixed(1)} 个月必要支出。若发生停工、疾病或临时大额支出，低于 6 个月时更容易被迫动用长期资产或增加负债。`,
     },
     {
       group: "财务独立",
@@ -2362,8 +2360,7 @@ function ReportPage({
           : metrics.surplusRate >= 10
             ? "watch"
             : "risk",
-      explanation:
-        "反映家庭积累资产和实现目标的能力。需要结合收入稳定性观察结余能否持续。",
+      explanation: `每 100 元收入目前可留下约 ${metrics.surplusRate.toFixed(1)} 元。结余既要补充安全储备，也要承担教育、养老和保障目标，因此需要确认这种结余能否长期保持。`,
     },
     {
       group: "财务独立",
@@ -2379,7 +2376,7 @@ function ReportPage({
             ? "watch"
             : "risk",
       explanation:
-        "观察当期收入中用于长期积累的比例，不代表具体投资产品适合度。",
+        "这部分资金决定教育和养老目标的积累速度。长期储备应与应急资金、保障预算分开安排，避免一个目标挤占另一个目标。",
     },
     {
       group: "财务独立",
@@ -2394,8 +2391,7 @@ function ReportPage({
           : metrics.debtRatio < 70
             ? "watch"
             : "risk",
-      explanation:
-        "反映资产对债务的覆盖程度。还需结合贷款利率、期限和年度偿债压力判断。",
+      explanation: `每 100 元资产对应约 ${metrics.debtRatio.toFixed(1)} 元负债。总体比例之外，更要确认主要收入者发生重疾、失能或身故后，房贷和家庭支出由什么资金继续承担。`,
     },
     {
       group: "财务独立",
@@ -2412,7 +2408,7 @@ function ReportPage({
               ? "watch"
               : "risk",
       explanation:
-        "比率高于 100% 表示收入能够覆盖支出；越高，家庭对波动的承受空间通常越大。",
+        "当前收入能够覆盖支出并形成结余，但这种状态仍依赖收入持续。需要进一步检验主要收入中断后，家庭现有资金和保障能维持多久。",
     },
     {
       group: "财务自由",
@@ -2429,7 +2425,7 @@ function ReportPage({
               ? "watch"
               : "risk",
       explanation:
-        "观察净资产中可用于长期积累的资产比例。高比例同时意味着需要关注风险与流动性。",
+        "反映净资产中可用于长期目标的资金比例。比例偏低时，家庭可能资产不少但可调度资金有限；比例较高时，也要同步关注波动和变现能力。",
     },
     {
       group: "财务自由",
@@ -2445,17 +2441,12 @@ function ReportPage({
             : metrics.freedomRatio >= 30
               ? "watch"
               : "risk",
-      explanation:
-        "以当前其他收入近似观察非固定工资收入对必要支出的覆盖程度，收入性质仍需人工核实。",
+      explanation: `当前其他收入约能覆盖 ${metrics.freedomRatio.toFixed(1)}% 的必要生活支出，家庭仍需要工资收入补足其余部分。租金、分红等收入还需确认稳定性和持续期限。`,
     },
   ];
   const evaluatedIndicators = indicators.filter(
     (item) => item.tone !== "pending",
   );
-  const priorities: string[] = [];
-  if (metrics.emergencyMonths < 6) {
-    priorities.push("把应急资金逐步补足至 6 个月必要支出");
-  }
   const adultPolicyTypesToReview = policyTypes.filter(
     (policyType) =>
       getPolicyAssessment(data.policyCoverage.self[policyType.id]) !==
@@ -2463,23 +2454,40 @@ function ReportPage({
       getPolicyAssessment(data.policyCoverage.spouse[policyType.id]) !==
         "configured",
   );
-  if (adultPolicyTypesToReview.length > 0) {
-    priorities.push(
-      `补充主要收入来源者的${adultPolicyTypesToReview
-        .slice(0, 3)
-        .map((policyType) => policyType.label)
-        .join("、")}配置与保额资料`,
-    );
-  }
-  if (metrics.homeRatio > 60) {
-    priorities.push("降低资产过度集中带来的流动性压力");
-  }
-  if (metrics.surplusRate < 30) {
-    priorities.push("复盘可调整支出，提升可持续年度结余");
-  }
-  if (priorities.length < 3) {
-    priorities.push(`围绕“${data.priorityGoal}”建立分期资金目标`);
-  }
+  const policyItemsToVerify =
+    policyReview.missing + policyReview.pending + policyReview.amountMissing;
+  const planningDirections = [
+    {
+      title: "现金流安全",
+      status:
+        metrics.emergencyMonths >= 6
+          ? `可覆盖 ${metrics.emergencyMonths.toFixed(1)} 个月必要支出`
+          : `距离 6 个月基础缓冲仍差 ${Math.max(0, 6 - metrics.emergencyMonths).toFixed(1)} 个月`,
+      description:
+        metrics.emergencyMonths >= 6
+          ? "现有安全储备已达到基础参考线。建议继续与教育、养老资金分开管理，避免临时支出打乱长期安排。"
+          : "建议先补足可随时使用的家庭备用金，避免停工、疾病或临时大额支出时被迫变现长期资产。",
+    },
+    {
+      title: "家庭责任保障",
+      status:
+        policyItemsToVerify > 0
+          ? `${policyItemsToVerify} 项保障资料或责任需要确认`
+          : "初筛未发现明确未配置项目",
+      description:
+        adultPolicyTypesToReview.length > 0
+          ? `主要收入来源者的${adultPolicyTypesToReview
+              .slice(0, 3)
+              .map((policyType) => policyType.label)
+              .join("、")}需要优先核对。完整保单到位后，应确认责任范围、保额、期限、续保条件和受益人安排。`
+          : "保单数量和保额只是初筛。还需确认医疗费用、重大疾病后的收入中断，以及身故后的负债和家庭责任是否都有明确资金来源。",
+    },
+    {
+      title: "长期目标安排",
+      status: `当前首要目标为“${data.priorityGoal}”`,
+      description: `建议分别测算${data.educationGoal === "暂未确定" ? "子女教育" : data.educationGoal}、${data.retirementGoal === "暂未确定" ? "退休养老" : data.retirementGoal}和负债责任的目标金额与时间，再决定结余资金的分配顺序。`,
+    },
+  ];
 
   const downloadReport = async () => {
     if (!reportRef.current || exportStatus === "exporting") return;
@@ -2549,7 +2557,7 @@ function ReportPage({
             <div><dt>家庭阶段</dt><dd>{data.stage}</dd></div>
             <div><dt>规划顾问</dt><dd>{data.advisorName || "待填写"}</dd></div>
             <div><dt>顾问身份</dt><dd>{data.advisorTitle || "待填写"}</dd></div>
-            <div><dt>计算口径</dt><dd>{CALCULATION_VERSION}</dd></div>
+            <div><dt>分析依据</dt><dd>家庭资料与保单初筛</dd></div>
           </dl>
 
           <section className="three-stage-report">
@@ -2604,7 +2612,7 @@ function ReportPage({
               <span>04</span><strong>九项财务指标</strong><small>公式、参考值与逐项判断</small>
             </div>
             <div>
-              <span>05</span><strong>目标、保单与执行</strong><small>保单初筛与 30 天行动</small>
+              <span>05</span><strong>目标、保单与规划</strong><small>保单初筛与专业建议</small>
             </div>
           </section>
           <ReportSheetFooter page={1} status={dataStatus} />
@@ -2634,7 +2642,7 @@ function ReportPage({
             <CompositionFigure title="支出结构" total={metrics.expense} lines={expenseLines} />
           </section>
           <section className="advisor-analysis">
-            <span>顾问讲解要点</span>
+            <span>现金流对家庭的影响</span>
             <div>
               <p>
                 固定收入占家庭收入的{" "}
@@ -2644,15 +2652,18 @@ function ReportPage({
                     : "0.0"}
                   %
                 </strong>
-                ，收入稳定程度记录为“{data.incomeStability}”。
+                ，收入稳定程度为“{data.incomeStability}”。如果主要收入来源者因疾病或意外暂时无法工作，
+                家庭仍需持续承担生活、教育和负债支出，因此要确认收入中断期间的资金来源。
               </p>
               <p>
                 当前结余率为 <strong>{metrics.surplusRate.toFixed(1)}%</strong>，
-                参考目标为 30% 以上；其他收入 {formatWan(data.otherIncome)} 万元仍需核实其持续性。
+                参考目标为 30% 以上。家庭仍有积累能力，但教育、养老和保障目标同时推进时，
+                需要先确定安全储备与长期资金的分配比例。
               </p>
               <p>
                 保障型保费占收入 <strong>{metrics.protectionExpenseRatio.toFixed(1)}%</strong>，
-                这里只判断预算占用，保障责任是否充足仍需核对保额、期限和除外责任。
+                这个数字不能直接说明保障充足或不足。真正需要确认的是医疗费用、重大疾病后的收入损失，
+                以及身故后的房贷、教育和赡养责任是否已有相应保障承接。
               </p>
             </div>
           </section>
@@ -2770,7 +2781,7 @@ function ReportPage({
               <span>当前值</span>
               <span>参考值</span>
               <span>判断</span>
-              <span>顾问解释</span>
+              <span>家庭影响</span>
             </div>
             {indicators.map((indicator) => (
               <div className="indicator-row" key={indicator.name}>
@@ -2798,9 +2809,9 @@ function ReportPage({
 
         <article className="report-sheet">
           <ReportSheetHeader
-            section="05 / GOALS & ACTIONS"
-            title="家庭目标、保单初筛与执行建议"
-            subtitle="把数据结论转化为家庭能够理解、能够确认、能够执行的下一步。"
+            section="05 / FAMILY PROTECTION"
+            title="家庭目标、保单初筛与规划建议"
+            subtitle="从家庭责任和现金流出发，判断风险由什么资金承接，再确定保障与长期目标的安排方向。"
           />
           <section className="family-profile-report">
             <div>
@@ -2916,30 +2927,43 @@ function ReportPage({
               </small>
             </div>
           </section>
-          <section className="action-plan-report">
-            <div className="action-plan-title">
-              <span>建议执行顺序</span>
-              <h2>未来 30 天先完成三件事</h2>
+          <section className="planning-direction-report">
+            <div className="planning-direction-title">
+              <span>家庭规划方向</span>
+              <h2>先稳住安全底座，再安排长期目标</h2>
+              <p>规划重点不是拥有更多保单，而是让每一项家庭责任都有明确、可持续的资金来源。</p>
             </div>
-            <ol>
-              {priorities.slice(0, 3).map((priority, index) => (
-                <li key={priority}>
-                  <span>{index + 1}</span>
-                  <strong>{priority}</strong>
-                </li>
+            <div className="planning-direction-list">
+              {planningDirections.map((direction) => (
+                <article key={direction.title}>
+                  <span>{direction.title}</span>
+                  <strong>{direction.status}</strong>
+                  <p>{direction.description}</p>
+                </article>
               ))}
-            </ol>
-          </section>
-          <section className="final-advisor-note">
-            <div>
-              <span>顾问综合判断</span>
-              <p>{data.reportSummary || "待补充顾问综合判断。"}</p>
             </div>
-            <div>
-              <span>约定的下一步</span>
-              <strong>{data.nextAction || "待家庭与顾问共同确认"}</strong>
+          </section>
+          <section className="professional-report-summary">
+            <div className="professional-summary-copy">
+              <span>专业报告解读</span>
+              <h2>{householdRisk.description}</h2>
+              <p>
+                {data.reportSummary ||
+                  "需要结合家庭责任、现金流和完整保单资料，进一步确认风险发生时的资金来源。"}
+              </p>
+              <p>
+                对家庭而言，保障是否合适不取决于保单数量，而取决于医疗费用、收入中断、
+                未偿负债、子女教育和赡养责任是否都能被现有资金与保障覆盖。
+              </p>
+            </div>
+            <div className="professional-next-review">
+              <span>建议重点核实</span>
+              <strong>
+                {data.nextAction ||
+                  "取得完整保单后，逐项确认责任范围、保额、期限与除外事项"}
+              </strong>
               <small>
-                风险偏好：{data.riskPreference} · 流动资金意愿：{data.liquidityNeed}
+                核实完成后，再根据家庭预算、责任金额和责任期限确定需要补足的顺序。
               </small>
             </div>
           </section>
