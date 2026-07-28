@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.playwright-cli/
+output/
+.DS_Store
+*.local
+
+# 原始参考资料与生成中的设计稿不进入代码仓库
+参考示例/
+页面图/
+家庭财务规划工具_完整产品与开发方案_v1.md
