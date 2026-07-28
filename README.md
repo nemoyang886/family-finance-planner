@@ -2,6 +2,8 @@
 
 面向保险顾问的电脑网页端家庭财务资料填写与图文报告工具。
 
+在线体验：<https://nemoyang886.github.io/family-finance-planner/>
+
 ## 当前范围
 
 - 保险顾问在电脑端填写家庭资料；
