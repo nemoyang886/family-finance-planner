@@ -49,7 +49,7 @@ type StepId =
 type ViewMode = "form" | "report";
 type SaveStatus = "saved" | "saving";
 type ExportStatus = "idle" | "exporting";
-const CALCULATION_VERSION = "MVP 0.1";
+const CALCULATION_VERSION = "MVP 0.2";
 
 type PlannerData = {
   householdName: string;
@@ -299,9 +299,28 @@ export function App() {
     const homeRatio = assets > 0 ? (data.homeAssets / assets) * 100 : 0;
     const debtRatio = assets > 0 ? (data.totalDebt / assets) * 100 : 0;
     const surplusRate = income > 0 ? (surplus / income) * 100 : 0;
+    const fixedIncome = data.selfIncome + data.spouseIncome;
+    const essentialExpenseRatio =
+      income > 0 ? (necessaryAnnual / income) * 100 : 0;
+    const protectionExpenseRatio =
+      income > 0 ? (data.insuranceExpense / income) * 100 : 0;
+    const cashCoverageRatio =
+      necessaryAnnual > 0 ? (data.cashAssets / necessaryAnnual) * 100 : 0;
+    const investmentExpenseRatio =
+      income > 0
+        ? ((data.savingExpense + data.investmentExpense) / income) * 100
+        : 0;
+    const independenceRatio = expense > 0 ? (income / expense) * 100 : 0;
+    const financialAssetRatio =
+      netAssets > 0
+        ? ((data.investmentAssets + data.policyCashValue) / netAssets) * 100
+        : 0;
+    const freedomRatio =
+      necessaryAnnual > 0 ? (data.otherIncome / necessaryAnnual) * 100 : 0;
 
     return {
       income,
+      fixedIncome,
       expense,
       surplus,
       assets,
@@ -311,6 +330,13 @@ export function App() {
       homeRatio,
       debtRatio,
       surplusRate,
+      essentialExpenseRatio,
+      protectionExpenseRatio,
+      cashCoverageRatio,
+      investmentExpenseRatio,
+      independenceRatio,
+      financialAssetRatio,
+      freedomRatio,
     };
   }, [data]);
 
@@ -1221,6 +1247,7 @@ function StepForm({
 function getMetricsShape() {
   return {
     income: 0,
+    fixedIncome: 0,
     expense: 0,
     surplus: 0,
     assets: 0,
@@ -1230,6 +1257,13 @@ function getMetricsShape() {
     homeRatio: 0,
     debtRatio: 0,
     surplusRate: 0,
+    essentialExpenseRatio: 0,
+    protectionExpenseRatio: 0,
+    cashCoverageRatio: 0,
+    investmentExpenseRatio: 0,
+    independenceRatio: 0,
+    financialAssetRatio: 0,
+    freedomRatio: 0,
   };
 }
 
@@ -1414,6 +1448,162 @@ function LiveReport({
   );
 }
 
+type ReportLine = {
+  label: string;
+  value: number;
+  color: string;
+};
+
+type MetricTone = "good" | "watch" | "risk" | "pending";
+
+type FinancialIndicator = {
+  group: string;
+  name: string;
+  formula: string;
+  value: string;
+  ideal: string;
+  tone: MetricTone;
+  explanation: string;
+};
+
+function ReportSheetHeader({
+  section,
+  title,
+  subtitle,
+}: {
+  section: string;
+  title: string;
+  subtitle: string;
+}) {
+  return (
+    <header className="sheet-header">
+      <span>{section}</span>
+      <div>
+        <h2>{title}</h2>
+        <p>{subtitle}</p>
+      </div>
+    </header>
+  );
+}
+
+function ReportSheetFooter({
+  page,
+  status,
+}: {
+  page: number;
+  status: string;
+}) {
+  return (
+    <footer className="sheet-footer">
+      <span>家庭财务规划报告书 · {status}</span>
+      <b>{String(page).padStart(2, "0")}</b>
+    </footer>
+  );
+}
+
+function StatementTable({
+  title,
+  lines,
+  total,
+  unit = "万元 / 年",
+}: {
+  title: string;
+  lines: ReportLine[];
+  total: number;
+  unit?: string;
+}) {
+  return (
+    <div className="statement-table">
+      <div className="statement-table-title">
+        <strong>{title}</strong>
+        <span>{unit}</span>
+      </div>
+      <div className="statement-table-head">
+        <span>项目</span>
+        <span>占比</span>
+        <span>金额</span>
+      </div>
+      {lines.map((line) => (
+        <div className="statement-row" key={line.label}>
+          <span>
+            <i style={{ background: line.color }} />
+            {line.label}
+          </span>
+          <span>{total > 0 ? ((line.value / total) * 100).toFixed(1) : "0.0"}%</span>
+          <strong>{formatWan(line.value)}</strong>
+        </div>
+      ))}
+      <div className="statement-total">
+        <span>合计</span>
+        <span>100.0%</span>
+        <strong>{formatWan(total)}</strong>
+      </div>
+    </div>
+  );
+}
+
+function CompositionFigure({
+  title,
+  total,
+  lines,
+  unit = "万元 / 年",
+}: {
+  title: string;
+  total: number;
+  lines: ReportLine[];
+  unit?: string;
+}) {
+  let cursor = 0;
+  const gradient =
+    total > 0
+      ? lines
+          .map((line) => {
+            const start = cursor;
+            cursor += (line.value / total) * 100;
+            return `${line.color} ${start}% ${cursor}%`;
+          })
+          .join(", ")
+      : "#dfe5eb 0% 100%";
+
+  return (
+    <div className="composition-figure">
+      <div
+        className="composition-donut"
+        style={{ background: `conic-gradient(${gradient})` }}
+      >
+        <span>
+          <strong>{formatWan(total)}</strong>
+          <small>{unit}</small>
+        </span>
+      </div>
+      <div className="composition-copy">
+        <h3>{title}</h3>
+        {lines.map((line) => (
+          <div key={line.label}>
+            <span>
+              <i style={{ background: line.color }} />
+              {line.label}
+            </span>
+            <strong>
+              {total > 0 ? ((line.value / total) * 100).toFixed(1) : "0.0"}%
+            </strong>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function MetricStatus({ tone }: { tone: MetricTone }) {
+  const labels: Record<MetricTone, string> = {
+    good: "达标",
+    watch: "关注",
+    risk: "优先改善",
+    pending: "待补充",
+  };
+  return <span className={`metric-status ${tone}`}>{labels[tone]}</span>;
+}
+
 function ReportPage({
   data,
   metrics,
@@ -1423,33 +1613,238 @@ function ReportPage({
   metrics: ReturnType<typeof getMetricsShape>;
   onBack: () => void;
 }) {
-  const reportRef = useRef<HTMLElement>(null);
+  const reportRef = useRef<HTMLDivElement>(null);
   const [exportStatus, setExportStatus] = useState<ExportStatus>("idle");
-  const maxCashflow = Math.max(metrics.income, metrics.expense, 1);
+  const dataStatus = data.dataConfirmed ? "家庭已确认" : "顾问填写草稿";
   const statusCopy =
     metrics.income === 0 && metrics.assets === 0
       ? "核心资料尚待补充"
       : metrics.emergencyMonths < 6
-      ? "应急资金仍需补足"
-      : metrics.homeRatio > 60
-        ? "先改善家庭资产流动性"
-        : "家庭现金流保持稳定";
+        ? "先补足家庭财务安全垫"
+        : metrics.homeRatio > 60
+          ? "现金流稳定，资产流动性需要改善"
+          : "家庭财务结构总体保持稳定";
+
+  const incomeLines: ReportLine[] = [
+    { label: "本人固定收入", value: data.selfIncome, color: "#2f6ddf" },
+    { label: "配偶固定收入", value: data.spouseIncome, color: "#78a4ef" },
+    { label: "其他收入", value: data.otherIncome, color: "#75a58d" },
+  ];
+  const expenseLines: ReportLine[] = [
+    { label: "日常生活", value: data.livingExpense, color: "#315f9d" },
+    { label: "子女教育", value: data.educationExpense, color: "#6f90c8" },
+    { label: "父母赡养", value: data.parentExpense, color: "#9ab1d4" },
+    { label: "债务偿还", value: data.debtService, color: "#c69252" },
+    { label: "储蓄理财", value: data.savingExpense, color: "#6d9b83" },
+    { label: "投资投入", value: data.investmentExpense, color: "#90b39f" },
+    { label: "保障型保费", value: data.insuranceExpense, color: "#a2719a" },
+    { label: "其他支出", value: data.otherExpense, color: "#a5adb8" },
+  ];
+  const assetLines: ReportLine[] = [
+    { label: "随时可用资金", value: data.cashAssets, color: "#2f6ddf" },
+    { label: "自住及使用资产", value: data.homeAssets, color: "#73a1eb" },
+    { label: "投资理财资产", value: data.investmentAssets, color: "#6fa289" },
+    { label: "保单现金价值", value: data.policyCashValue, color: "#c28b45" },
+  ];
+
+  const hasIncome = metrics.income > 0;
+  const hasAssets = metrics.assets > 0;
+  const indicators: FinancialIndicator[] = [
+    {
+      group: "财务安全",
+      name: "必要生活支出比率",
+      formula: "必要生活年支出 ÷ 年收入",
+      value: `${metrics.essentialExpenseRatio.toFixed(1)}%`,
+      ideal: "< 50%",
+      tone: !hasIncome
+        ? "pending"
+        : metrics.essentialExpenseRatio < 50
+          ? "good"
+          : metrics.essentialExpenseRatio < 65
+            ? "watch"
+            : "risk",
+      explanation:
+        "衡量基本生活、教育和赡养对收入的占用。比率越低，家庭调整空间越充足。",
+    },
+    {
+      group: "财务安全",
+      name: "保障支出比率",
+      formula: "保障型保费 ÷ 年收入",
+      value: `${metrics.protectionExpenseRatio.toFixed(1)}%`,
+      ideal: "≥ 10% 参考",
+      tone: !hasIncome
+        ? "pending"
+        : metrics.protectionExpenseRatio >= 10
+          ? "good"
+          : metrics.protectionExpenseRatio >= 5
+            ? "watch"
+            : "risk",
+      explanation:
+        "反映家庭是否持续为风险保障安排预算。最终仍需结合责任、保额和保障期限判断。",
+    },
+    {
+      group: "财务安全",
+      name: "财务安全比率",
+      formula: "现金类资产 ÷ 必要生活年支出",
+      value: `${metrics.cashCoverageRatio.toFixed(1)}%`,
+      ideal: "≥ 50%",
+      tone:
+        metrics.necessaryAnnual <= 0
+          ? "pending"
+          : metrics.cashCoverageRatio >= 50
+            ? "good"
+            : metrics.cashCoverageRatio >= 25
+              ? "watch"
+              : "risk",
+      explanation: `目前可覆盖约 ${metrics.emergencyMonths.toFixed(1)} 个月必要支出，参考目标为 6 至 12 个月。`,
+    },
+    {
+      group: "财务独立",
+      name: "结余比率",
+      formula: "年度结余 ÷ 年收入",
+      value: `${metrics.surplusRate.toFixed(1)}%`,
+      ideal: "≥ 30%",
+      tone: !hasIncome
+        ? "pending"
+        : metrics.surplusRate >= 30
+          ? "good"
+          : metrics.surplusRate >= 10
+            ? "watch"
+            : "risk",
+      explanation:
+        "反映家庭积累资产和实现目标的能力。需要结合收入稳定性观察结余能否持续。",
+    },
+    {
+      group: "财务独立",
+      name: "理财投资支出比率",
+      formula: "储蓄及投资投入 ÷ 年收入",
+      value: `${metrics.investmentExpenseRatio.toFixed(1)}%`,
+      ideal: "≥ 30% 参考",
+      tone: !hasIncome
+        ? "pending"
+        : metrics.investmentExpenseRatio >= 30
+          ? "good"
+          : metrics.investmentExpenseRatio >= 15
+            ? "watch"
+            : "risk",
+      explanation:
+        "观察当期收入中用于长期积累的比例，不代表具体投资产品适合度。",
+    },
+    {
+      group: "财务独立",
+      name: "负债比率",
+      formula: "总负债 ÷ 总资产",
+      value: `${metrics.debtRatio.toFixed(1)}%`,
+      ideal: "< 50%",
+      tone: !hasAssets
+        ? "pending"
+        : metrics.debtRatio < 50
+          ? "good"
+          : metrics.debtRatio < 70
+            ? "watch"
+            : "risk",
+      explanation:
+        "反映资产对债务的覆盖程度。还需结合贷款利率、期限和年度偿债压力判断。",
+    },
+    {
+      group: "财务独立",
+      name: "财务独立比率",
+      formula: "年收入 ÷ 年支出",
+      value: `${metrics.independenceRatio.toFixed(1)}%`,
+      ideal: "> 100%",
+      tone:
+        metrics.expense <= 0
+          ? "pending"
+          : metrics.independenceRatio > 120
+            ? "good"
+            : metrics.independenceRatio >= 100
+              ? "watch"
+              : "risk",
+      explanation:
+        "比率高于 100% 表示收入能够覆盖支出；越高，家庭对波动的承受空间通常越大。",
+    },
+    {
+      group: "财务自由",
+      name: "资产规模比率",
+      formula: "投资类资产 ÷ 净资产",
+      value: `${metrics.financialAssetRatio.toFixed(1)}%`,
+      ideal: "≥ 50% 参考",
+      tone:
+        metrics.netAssets <= 0
+          ? "pending"
+          : metrics.financialAssetRatio >= 50
+            ? "good"
+            : metrics.financialAssetRatio >= 30
+              ? "watch"
+              : "risk",
+      explanation:
+        "观察净资产中可用于长期积累的资产比例。高比例同时意味着需要关注风险与流动性。",
+    },
+    {
+      group: "财务自由",
+      name: "财务自由比率",
+      formula: "其他收入 ÷ 必要生活年支出",
+      value: `${metrics.freedomRatio.toFixed(1)}%`,
+      ideal: "≥ 100%",
+      tone:
+        metrics.necessaryAnnual <= 0
+          ? "pending"
+          : metrics.freedomRatio >= 100
+            ? "good"
+            : metrics.freedomRatio >= 30
+              ? "watch"
+              : "risk",
+      explanation:
+        "以当前其他收入近似观察非固定工资收入对必要支出的覆盖程度，收入性质仍需人工核实。",
+    },
+  ];
+  const scoredIndicators = indicators.filter((item) => item.tone !== "pending");
+  const healthScore =
+    scoredIndicators.length > 0
+      ? Math.round(
+          (scoredIndicators.reduce(
+            (score, item) =>
+              score +
+              (item.tone === "good" ? 1 : item.tone === "watch" ? 0.5 : 0),
+            0,
+          ) /
+            scoredIndicators.length) *
+            100,
+        )
+      : 0;
+  const priorities: string[] = [];
+  if (metrics.emergencyMonths < 6) {
+    priorities.push("把应急资金逐步补足至 6 个月必要支出");
+  }
+  if (data.selfProtection !== "已覆盖" || data.spouseProtection !== "已覆盖") {
+    priorities.push("核对主要收入来源者的身故、重疾、医疗与保障期限");
+  }
+  if (metrics.homeRatio > 60) {
+    priorities.push("降低资产过度集中带来的流动性压力");
+  }
+  if (metrics.surplusRate < 30) {
+    priorities.push("复盘可调整支出，提升可持续年度结余");
+  }
+  if (priorities.length < 3) {
+    priorities.push(`围绕“${data.priorityGoal}”建立分期资金目标`);
+  }
+
   const downloadReport = async () => {
     if (!reportRef.current || exportStatus === "exporting") return;
     setExportStatus("exporting");
     try {
       const image = await toPng(reportRef.current, {
         cacheBust: true,
-        backgroundColor: "#fcfdff",
-        pixelRatio: 2,
+        backgroundColor: "#eef2f5",
+        pixelRatio: 1.5,
       });
       const link = document.createElement("a");
       const safeName = data.householdName.trim().replace(/[\\/:*?"<>|]/g, "-");
-      link.download = `${safeName || "家庭"}-家庭财务规划报告.png`;
+      link.download = `${safeName || "家庭"}-家庭财务规划报告书.png`;
       link.href = image;
       link.click();
     } catch {
-      window.alert("图片生成失败，请尝试使用“打印报告”保存为 PDF。");
+      window.alert("完整长图生成失败，请尝试使用“打印 / PDF”导出。");
     } finally {
       setExportStatus("idle");
     }
@@ -1462,7 +1857,7 @@ function ReportPage({
           <ArrowLeft size={17} />
           返回填写
         </button>
-        <span>报告数据仅保存在当前浏览器</span>
+        <span>共 5 页 · 数据仅保存在当前浏览器</span>
         <div className="report-toolbar-actions">
           <button
             className="button button-secondary compact"
@@ -1483,181 +1878,385 @@ function ReportPage({
             ) : (
               <DownloadSimple size={17} />
             )}
-            {exportStatus === "exporting" ? "生成中" : "下载高清图片"}
+            {exportStatus === "exporting" ? "生成中" : "下载完整长图"}
           </button>
         </div>
       </div>
 
-      <article className="report-page" ref={reportRef}>
-        <header className="report-heading">
-          <div>
-            <span className="report-label">家庭财务体检报告</span>
+      <div className="report-document" ref={reportRef}>
+        <article className="report-sheet report-cover-sheet">
+          <header className="cover-heading">
+            <span className="report-label">家庭财务规划报告书</span>
             <h1>{data.householdName}</h1>
-            <p>以家庭责任为起点，先确认事实，再安排下一步。</p>
-          </div>
-          <dl>
-            <div>
-              <dt>报告日期</dt>
-              <dd>{formatReportDate()}</dd>
-            </div>
-            <div>
-              <dt>资料状态</dt>
-              <dd>{data.dataConfirmed ? "家庭已确认" : "顾问填写草稿"}</dd>
-            </div>
-            <div>
-              <dt>规划顾问</dt>
-              <dd>{data.advisorName || "待填写"}</dd>
-            </div>
-            <div>
-              <dt>计算口径</dt>
-              <dd>{CALCULATION_VERSION}</dd>
-            </div>
+            <p>看清当下，安排未来，让家庭的每一次选择更从容。</p>
+          </header>
+
+          <dl className="cover-meta">
+            <div><dt>报告日期</dt><dd>{formatReportDate()}</dd></div>
+            <div><dt>资料状态</dt><dd>{dataStatus}</dd></div>
+            <div><dt>家庭阶段</dt><dd>{data.stage}</dd></div>
+            <div><dt>规划顾问</dt><dd>{data.advisorName || "待填写"}</dd></div>
+            <div><dt>顾问身份</dt><dd>{data.advisorTitle || "待填写"}</dd></div>
+            <div><dt>计算口径</dt><dd>{CALCULATION_VERSION}</dd></div>
           </dl>
-        </header>
 
-        <section className="report-thesis">
-          <div className="thesis-icon">
-            <House size={34} weight="fill" />
-          </div>
-          <div>
-            <span>当前判断</span>
-            <h2>{statusCopy}</h2>
-            <p>{data.reportSummary || "请返回填写顾问综合判断。"}</p>
-          </div>
-          <div className="stage-path">
-            <span className="current">财务安全</span>
-            <i />
-            <span>财务独立</span>
-            <i />
-            <span>财务自由</span>
-          </div>
-        </section>
-
-        <section className="report-grid">
-          <div className="report-panel cashflow-panel">
-            <div className="report-panel-heading">
-              <div>
-                <span>现金流</span>
-                <h2>每年留下多少钱</h2>
-              </div>
-              <strong>{formatWan(metrics.surplus)} 万</strong>
+          <section className="three-stage-report">
+            <div>
+              <small>第一阶段</small>
+              <strong>财务安全</strong>
+              <span>6 至 12 个月生活准备金与风险保障</span>
             </div>
-            <div className="report-bars">
-              <div>
-                <span>收入</span>
-                <i>
-                  <b style={{ width: `${(metrics.income / maxCashflow) * 100}%` }} />
-                </i>
-                <strong>{formatWan(metrics.income)} 万</strong>
+            <div>
+              <small>第二阶段</small>
+              <strong>财务独立</strong>
+              <span>收入稳定覆盖支出，并持续形成结余</span>
+            </div>
+            <div>
+              <small>第三阶段</small>
+              <strong>财务自由</strong>
+              <span>非固定工资收入覆盖必要生活支出</span>
+            </div>
+          </section>
+
+          <section className="cover-diagnosis">
+            <div className="diagnosis-score">
+              <span>财务结构参考得分</span>
+              <strong>{healthScore}</strong>
+              <small>/ 100</small>
+            </div>
+            <div>
+              <span>本次核心判断</span>
+              <h2>{statusCopy}</h2>
+              <p>{data.reportSummary || "核心资料尚未完整，暂不形成正式综合判断。"}</p>
+            </div>
+          </section>
+
+          <section className="cover-kpis">
+            <div><span>家庭年收入</span><strong>{formatWan(metrics.income)} 万</strong></div>
+            <div><span>年度结余</span><strong>{formatWan(metrics.surplus)} 万</strong></div>
+            <div><span>家庭净资产</span><strong>{formatWan(metrics.netAssets)} 万</strong></div>
+            <div><span>应急资金</span><strong>{metrics.emergencyMonths.toFixed(1)} 个月</strong></div>
+          </section>
+
+          <section className="report-toc">
+            <div>
+              <span>01</span><strong>家庭财务总览</strong><small>核心结论与三阶段目标</small>
+            </div>
+            <div>
+              <span>02</span><strong>收入与支出分析</strong><small>年度现金流与构成</small>
+            </div>
+            <div>
+              <span>03</span><strong>资产与负债分析</strong><small>净资产、集中度与流动性</small>
+            </div>
+            <div>
+              <span>04</span><strong>九项财务指标</strong><small>公式、参考值与逐项判断</small>
+            </div>
+            <div>
+              <span>05</span><strong>目标保障与执行</strong><small>责任地图与 30 天行动</small>
+            </div>
+          </section>
+          <ReportSheetFooter page={1} status={dataStatus} />
+        </article>
+
+        <article className="report-sheet">
+          <ReportSheetHeader
+            section="02 / CASH FLOW"
+            title="家庭收入与支出分析"
+            subtitle="先确认每一笔钱从哪里来、到哪里去，再判断结余是否可持续。"
+          />
+          <section className="statement-grid">
+            <StatementTable title="家庭收入表" lines={incomeLines} total={metrics.income} />
+            <StatementTable title="家庭支出表" lines={expenseLines} total={metrics.expense} />
+          </section>
+          <section className="cashflow-equation">
+            <div><span>总收入</span><strong>{formatWan(metrics.income)} 万</strong></div>
+            <i>−</i>
+            <div><span>总支出</span><strong>{formatWan(metrics.expense)} 万</strong></div>
+            <i>=</i>
+            <div className={metrics.surplus >= 0 ? "positive" : "negative"}>
+              <span>年度结余</span><strong>{formatWan(metrics.surplus)} 万</strong>
+            </div>
+          </section>
+          <section className="composition-grid">
+            <CompositionFigure title="收入结构" total={metrics.income} lines={incomeLines} />
+            <CompositionFigure title="支出结构" total={metrics.expense} lines={expenseLines} />
+          </section>
+          <section className="advisor-analysis">
+            <span>顾问讲解要点</span>
+            <div>
+              <p>
+                固定收入占家庭收入的{" "}
+                <strong>
+                  {metrics.income > 0
+                    ? ((metrics.fixedIncome / metrics.income) * 100).toFixed(1)
+                    : "0.0"}
+                  %
+                </strong>
+                ，收入稳定程度记录为“{data.incomeStability}”。
+              </p>
+              <p>
+                当前结余率为 <strong>{metrics.surplusRate.toFixed(1)}%</strong>，
+                参考目标为 30% 以上；其他收入 {formatWan(data.otherIncome)} 万元仍需核实其持续性。
+              </p>
+              <p>
+                保障型保费占收入 <strong>{metrics.protectionExpenseRatio.toFixed(1)}%</strong>，
+                这里只判断预算占用，保障责任是否充足仍需核对保额、期限和除外责任。
+              </p>
+            </div>
+          </section>
+          <ReportSheetFooter page={2} status={dataStatus} />
+        </article>
+
+        <article className="report-sheet">
+          <ReportSheetHeader
+            section="03 / BALANCE SHEET"
+            title="家庭资产与负债分析"
+            subtitle="资产规模之外，更重要的是流动性、集中度以及对家庭责任的支撑能力。"
+          />
+          <section className="balance-summary-grid">
+            <div><span>总资产</span><strong>{formatWan(metrics.assets)} 万</strong></div>
+            <div><span>总负债</span><strong>{formatWan(data.totalDebt)} 万</strong></div>
+            <div><span>家庭净资产</span><strong>{formatWan(metrics.netAssets)} 万</strong></div>
+            <div><span>资产负债率</span><strong>{metrics.debtRatio.toFixed(1)}%</strong></div>
+          </section>
+          <section className="balance-detail-grid">
+            <StatementTable
+              title="家庭资产表"
+              lines={assetLines}
+              total={metrics.assets}
+              unit="万元"
+            />
+            <div className="balance-visual-panel">
+              <CompositionFigure
+                title="资产构成"
+                total={metrics.assets}
+                lines={assetLines}
+                unit="万元"
+              />
+              <div className="liquidity-meter">
+                <div>
+                  <span>房产集中度</span>
+                  <strong>{metrics.homeRatio.toFixed(1)}%</strong>
+                </div>
+                <i><b style={{ width: `${clamp(metrics.homeRatio)}%` }} /></i>
+                <small>参考观察线：60%</small>
               </div>
-              <div className="expense">
-                <span>支出</span>
+              <div className="liquidity-meter cash">
+                <div>
+                  <span>应急资金覆盖</span>
+                  <strong>{metrics.emergencyMonths.toFixed(1)} 个月</strong>
+                </div>
                 <i>
-                  <b style={{ width: `${(metrics.expense / maxCashflow) * 100}%` }} />
+                  <b style={{ width: `${clamp((metrics.emergencyMonths / 12) * 100)}%` }} />
                 </i>
-                <strong>{formatWan(metrics.expense)} 万</strong>
+                <small>参考区间：6 至 12 个月</small>
               </div>
+            </div>
+          </section>
+          <section className="debt-detail">
+            <div>
+              <span>主要负债类型</span>
+              <strong>{data.debtType}</strong>
+            </div>
+            <div>
+              <span>年度偿债支出</span>
+              <strong>{formatWan(data.debtService)} 万</strong>
+            </div>
+            <div>
+              <span>偿债支出占收入</span>
+              <strong>
+                {metrics.income > 0
+                  ? ((data.debtService / metrics.income) * 100).toFixed(1)
+                  : "0.0"}
+                %
+              </strong>
+            </div>
+          </section>
+          <section className="advisor-analysis">
+            <span>资产结构判断</span>
+            <div>
+              <p>{getAssetInsight(metrics)}</p>
+              <p>
+                投资理财资产与已核实保单现金价值合计{" "}
+                <strong>{formatWan(data.investmentAssets + data.policyCashValue)} 万元</strong>，
+                占净资产 {metrics.financialAssetRatio.toFixed(1)}%。
+              </p>
+              <p>
+                保单保额不计入资产，本页只使用已核实的现金价值；存在担保责任时应单独补充，不与实际负债混算。
+              </p>
+            </div>
+          </section>
+          <ReportSheetFooter page={3} status={dataStatus} />
+        </article>
+
+        <article className="report-sheet indicator-sheet">
+          <ReportSheetHeader
+            section="04 / FINANCIAL RATIOS"
+            title="九项家庭财务指标分析"
+            subtitle="参考值用于识别讨论顺序，不等同于统一标准，也不替代具体风险评估。"
+          />
+          <section className="indicator-summary">
+            <div>
+              <span>参考得分</span>
+              <strong>{healthScore}</strong>
+              <small>/ 100</small>
             </div>
             <p>
-              {metrics.income === 0 && metrics.expense === 0
-                ? "收入与支出资料尚未填写，当前不形成现金流结论。"
-                : `当前结余率为 ${metrics.surplusRate.toFixed(1)}%。收入中包含 ${formatWan(data.otherIncome)} 万元其他收入，需要继续确认稳定性。`}
+              已对 {scoredIndicators.length} 项可计算指标进行判断：
+              {indicators.filter((item) => item.tone === "good").length} 项达标，
+              {indicators.filter((item) => item.tone === "watch").length} 项关注，
+              {indicators.filter((item) => item.tone === "risk").length} 项优先改善。
             </p>
-          </div>
-
-          <div className="report-panel balance-panel">
-            <div className="report-panel-heading">
-              <div>
-                <span>资产负债</span>
-                <h2>钱主要放在哪里</h2>
-              </div>
-              <strong>{formatWan(metrics.netAssets)} 万</strong>
+          </section>
+          <section className="indicator-table">
+            <div className="indicator-head">
+              <span>阶段 / 指标</span>
+              <span>计算方式</span>
+              <span>当前值</span>
+              <span>参考值</span>
+              <span>判断</span>
+              <span>顾问解释</span>
             </div>
-            <div className="balance-figure">
-              <div className="house-figure">
-                <House size={68} weight="fill" />
+            {indicators.map((indicator) => (
+              <div className="indicator-row" key={indicator.name}>
                 <span>
-                  <strong>{metrics.homeRatio.toFixed(0)}%</strong>
-                  <small>房产占比</small>
+                  <small>{indicator.group}</small>
+                  <strong>{indicator.name}</strong>
                 </span>
+                <span>{indicator.formula}</span>
+                <strong>{indicator.value}</strong>
+                <span>{indicator.ideal}</span>
+                <MetricStatus tone={indicator.tone} />
+                <p>{indicator.explanation}</p>
               </div>
-              <dl>
-                <div><dt>总资产</dt><dd>{formatWan(metrics.assets)} 万</dd></div>
-                <div><dt>总负债</dt><dd>{formatWan(data.totalDebt)} 万</dd></div>
-                <div><dt>应急资金</dt><dd>{metrics.emergencyMonths.toFixed(1)} 个月</dd></div>
-              </dl>
-            </div>
-            <p>{getAssetInsight(metrics)}</p>
-          </div>
-        </section>
+            ))}
+          </section>
+          <section className="ratio-note">
+            <Info size={19} />
+            <p>
+              “其他收入”可能包含租金、分红、利息或临时性收入。财务自由比率形成正式结论前，
+              须确认收入性质、税费、稳定性与可持续期限。
+            </p>
+          </section>
+          <ReportSheetFooter page={4} status={dataStatus} />
+        </article>
 
-        <section className="responsibility-report">
-          <div className="responsibility-heading">
-            <span>家庭责任</span>
-            <h2>这份报告先保护谁，为什么</h2>
-            <p>把家庭成员、承担的责任和下一步核对动作放在一起讲。</p>
-          </div>
-          <div className="responsibility-flow">
-            <ResponsibilityCard
-              icon={<IdentificationCard size={27} />}
-              person="本人"
-              role="主要收入来源者"
-              status={data.selfProtection}
-              action="核对身故、重疾和保障期限"
-            />
-            <ResponsibilityCard
-              icon={<UsersThree size={27} />}
-              person="配偶"
-              role="共同收入与家庭责任"
-              status={data.spouseProtection}
-              action="确认家庭责任和现有保额"
-            />
-            {data.childrenCount > 0 ? (
+        <article className="report-sheet">
+          <ReportSheetHeader
+            section="05 / GOALS & ACTIONS"
+            title="家庭目标、保障责任与执行建议"
+            subtitle="把数据结论转化为家庭能够理解、能够确认、能够执行的下一步。"
+          />
+          <section className="family-profile-report">
+            <div>
+              <span>本人</span>
+              <strong>{data.selfAge || "待补充"} 岁</strong>
+              <small>{data.selfProtection}</small>
+            </div>
+            <div>
+              <span>配偶</span>
+              <strong>{data.spouseAge || "待补充"} 岁</strong>
+              <small>{data.spouseProtection}</small>
+            </div>
+            <div>
+              <span>子女</span>
+              <strong>{data.childrenCount} 人</strong>
+              <small>{data.childrenCount > 0 ? `最小 ${data.youngestChildAge} 岁` : "暂无记录"}</small>
+            </div>
+            <div>
+              <span>赡养父母</span>
+              <strong>{data.parentSupportCount} 人</strong>
+              <small>长期责任需持续复核</small>
+            </div>
+          </section>
+          <section className="goal-report-grid">
+            <div>
+              <GraduationCap size={25} />
+              <span>教育目标</span>
+              <strong>{data.educationGoal}</strong>
+              <p>需补充目标年份、预计金额、现有准备金和可接受调整范围。</p>
+            </div>
+            <div>
+              <PiggyBank size={25} />
+              <span>退休目标</span>
+              <strong>{data.retirementGoal}</strong>
+              <p>需补充目标生活费、退休后稳定收入和长期照护准备。</p>
+            </div>
+            <div>
+              <ShieldCheck size={25} />
+              <span>首要目标</span>
+              <strong>{data.priorityGoal}</strong>
+              <p>目标排序由家庭确认，产品与工具应在目标之后讨论。</p>
+            </div>
+          </section>
+          <section className="responsibility-report detailed">
+            <div className="responsibility-heading">
+              <span>家庭责任地图</span>
+              <h2>先保护承担责任的人</h2>
+              <p>覆盖状态是初步记录，不代表保额、期限和责任已经充分。</p>
+            </div>
+            <div className="responsibility-flow">
               <ResponsibilityCard
-                icon={<GraduationCap size={27} />}
-                person={`子女 · ${data.childrenCount}人`}
-                role={data.educationGoal}
-                status={data.childProtection}
-                action="确认教育目标时间和已备资金"
+                icon={<IdentificationCard size={27} />}
+                person="本人"
+                role="主要收入来源者"
+                status={data.selfProtection}
+                action="核对身故、重疾、医疗和保障期限"
               />
-            ) : data.parentSupportCount > 0 ? (
               <ResponsibilityCard
                 icon={<UsersThree size={27} />}
-                person={`父母 · ${data.parentSupportCount}人`}
-                role="赡养与长期照护责任"
-                status="需要核对"
-                action="确认持续支出和照护安排"
+                person="配偶"
+                role="共同收入与家庭责任"
+                status={data.spouseProtection}
+                action="确认责任分工、已有保额和预算"
               />
-            ) : (
               <ResponsibilityCard
-                icon={<House size={27} />}
-                person="其他家庭责任"
-                role="尚未登记"
-                status="资料不足"
-                action="返回家庭结构补充责任成员"
+                icon={<GraduationCap size={27} />}
+                person={data.childrenCount > 0 ? `子女 · ${data.childrenCount}人` : "子女"}
+                role={data.educationGoal}
+                status={data.childProtection}
+                action="核对医疗保障与教育目标准备"
               />
-            )}
-          </div>
-        </section>
-
-        <section className="report-action">
-          <span className="action-icon">
-            <ListChecks size={26} weight="fill" />
-          </span>
-          <div>
-            <small>30 天内的第一步</small>
-            <strong>{data.nextAction || "请填写下一步行动"}</strong>
+            </div>
+          </section>
+          <section className="action-plan-report">
+            <div className="action-plan-title">
+              <span>建议执行顺序</span>
+              <h2>未来 30 天先完成三件事</h2>
+            </div>
+            <ol>
+              {priorities.slice(0, 3).map((priority, index) => (
+                <li key={priority}>
+                  <span>{index + 1}</span>
+                  <strong>{priority}</strong>
+                </li>
+              ))}
+            </ol>
+          </section>
+          <section className="final-advisor-note">
+            <div>
+              <span>顾问综合判断</span>
+              <p>{data.reportSummary || "待补充顾问综合判断。"}</p>
+            </div>
+            <div>
+              <span>约定的下一步</span>
+              <strong>{data.nextAction || "待家庭与顾问共同确认"}</strong>
+              <small>
+                风险偏好：{data.riskPreference} · 流动资金意愿：{data.liquidityNeed}
+              </small>
+            </div>
+          </section>
+          <section className="report-legal-note">
+            <ShieldCheck size={20} />
             <p>
-              责任人：{data.advisorName || "规划顾问"}与家庭共同完成。完成后再形成正式建议。
+              本报告基于当前已填写资料生成，用于家庭财务状况整理与沟通，不构成收益承诺、
+              投资适当性结论、税务或法律意见，也不构成具体保险产品建议。正式方案应以家庭确认资料、
+              合同条款及专业人员复核为准。
             </p>
-          </div>
-          <span className="report-disclaimer">
-            {data.advisorName || "规划顾问"} · {data.advisorTitle || "家庭财务规划服务"}
-            <br />
-            本报告基于当前已填写资料生成，不构成收益承诺、投资建议或具体产品建议。
-          </span>
-        </section>
-      </article>
+          </section>
+          <ReportSheetFooter page={5} status={dataStatus} />
+        </article>
+      </div>
     </main>
   );
 }
