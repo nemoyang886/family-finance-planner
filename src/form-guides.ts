@@ -567,6 +567,11 @@ export const guidedOptions: Record<string, GuidedOption[]> = {
       label: "待补资料",
       description: "目前无法形成可靠金额，不用填成零。",
     },
+    {
+      value: "待确认",
+      label: "待确认",
+      description: "尚未完成资产范围或金额确认，不作主观估算。",
+    },
   ],
   investmentAssetTypes: [
     {

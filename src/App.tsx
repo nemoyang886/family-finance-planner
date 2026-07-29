@@ -2341,6 +2341,165 @@ function StepHeader({
   );
 }
 
+type DisplayOption = {
+  value: string;
+  label: string;
+  description: string;
+};
+
+const commonOptionLimit = 4;
+const optionFallbackValues = [
+  "待确认",
+  "暂不确定",
+  "暂未确定",
+  "其他或待确认",
+  "其他或不愿说明",
+  "不适用",
+];
+
+const compactOptionValues: Record<string, string[]> = {
+  maritalStatus: ["未婚单身", "初婚有配偶", "再婚有配偶", "离异"],
+  marriageYears: ["1-3年", "4-7年", "8-15年", "16年以上"],
+  childStatus: [
+    "无子女",
+    "有未成年子女",
+    "有成年但仍需经济支持的子女",
+    "子女已经济独立",
+  ],
+  childPlan: [
+    "计划1年内",
+    "计划1-3年",
+    "暂时不计划，未来可能考虑",
+    "明确不计划生育",
+  ],
+  familyTags: [
+    "双收入家庭",
+    "单收入家庭",
+    "定期赡养父母",
+    "有长期医疗或照护成员",
+  ],
+  decisionParticipants: ["本人", "配偶或伴侣", "父母", "成年子女"],
+  employmentType: [
+    "固定工资薪酬",
+    "绩效佣金薪酬",
+    "个体或企业经营",
+    "自由职业或项目制",
+  ],
+  parentSupportType: [
+    "无持续支持",
+    "定期生活费",
+    "医疗费用",
+    "日常照护",
+  ],
+  otherIncomeSources: [
+    "无其他收入",
+    "奖金绩效佣金",
+    "经营净收入",
+    "租金净收入",
+  ],
+  investmentAssetTypes: [
+    "定期存款及低波动资产",
+    "债券或固定收益类资产",
+    "基金股票等权益资产",
+    "投资性房产",
+  ],
+  debtTypes: ["无负债", "房贷", "消费贷或信用贷", "经营贷"],
+  educationPath: [
+    "暂不承担专项教育目标",
+    "本科国内",
+    "本科国外",
+    "职业或技能教育",
+  ],
+  retirementAge: ["55岁退休", "60岁退休", "65岁退休", "逐步退休"],
+  priorityGoal: ["应急资金", "家庭保障", "子女教育", "退休养老"],
+  liquidityNeed: ["3个月以内", "3-6个月", "6-12个月", "12个月以上"],
+  investmentExperience: [
+    "无投资经历",
+    "仅存款或低波动资产",
+    "有基金股票等波动资产经验",
+    "有多类资产或经营投资经验",
+  ],
+  lossTolerance: [
+    "无法接受明显下降",
+    "可接受约5%以内",
+    "可接受约5%-10%",
+    "可接受约10%-20%",
+  ],
+};
+
+function getCompactOptionValues(
+  options: Array<string | GuidedOption>,
+) {
+  const matchedGroup = Object.entries(guidedOptions).find(
+    ([, groupOptions]) => groupOptions === options,
+  )?.[0];
+  return matchedGroup
+    ? compactOptionValues[matchedGroup]
+    : undefined;
+}
+
+function normalizeDisplayOptions(
+  options: Array<string | GuidedOption>,
+  selectedValues: string[] = [],
+) {
+  const normalized: DisplayOption[] = options.map((option) =>
+    typeof option === "string"
+      ? { value: option, label: option, description: "" }
+      : option,
+  );
+  selectedValues.forEach((selectedValue) => {
+    if (
+      selectedValue &&
+      !normalized.some((option) => option.value === selectedValue)
+    ) {
+      normalized.push({
+        value: selectedValue,
+        label: selectedValue,
+        description: "这是旧版草稿中保留的选项，请按当前口径重新选择后再确认报告。",
+      });
+    }
+  });
+  return normalized;
+}
+
+function splitDisplayOptions(
+  options: DisplayOption[],
+  preferredValues?: string[],
+) {
+  if (options.length <= commonOptionLimit + 1) {
+    return { common: options, more: [] };
+  }
+
+  const fallback =
+    optionFallbackValues
+      .map((fallbackValue) =>
+        options.find((option) => option.value === fallbackValue),
+      )
+      .find(Boolean) ??
+    options.find((option) => option.value.includes("待确认"));
+  const commonValues = new Set<string>();
+  preferredValues?.forEach((preferredValue) => {
+    if (options.some((option) => option.value === preferredValue)) {
+      commonValues.add(preferredValue);
+    }
+  });
+  if (fallback) commonValues.add(fallback.value);
+  for (const option of options) {
+    if (
+      commonValues.size >=
+      commonOptionLimit + (fallback ? 1 : 0)
+    ) {
+      break;
+    }
+    commonValues.add(option.value);
+  }
+
+  return {
+    common: options.filter((option) => commonValues.has(option.value)),
+    more: options.filter((option) => !commonValues.has(option.value)),
+  };
+}
+
 function ChoiceGroup({
   label,
   value,
@@ -2354,26 +2513,38 @@ function ChoiceGroup({
   onChange: (value: string) => void;
   helper?: string;
 }) {
-  const normalizedOptions = options.map((option) =>
-    typeof option === "string"
-      ? { value: option, label: option, description: "" }
-      : option,
+  const normalizedOptions = normalizeDisplayOptions(options, [value]);
+  const { common, more } = splitDisplayOptions(
+    normalizedOptions,
+    getCompactOptionValues(options),
   );
-
-  return (
-    <fieldset className="choice-block" role="radiogroup">
-      <legend>{label}</legend>
-      {helper ? <p>{helper}</p> : null}
-      <div className="choice-grid">
-        {normalizedOptions.map((option, index) => (
+  const selectedOption = normalizedOptions.find(
+    (option) => option.value === value,
+  );
+  const selectedIsMore = more.some((option) => option.value === value);
+  const renderOptions = (displayOptions: DisplayOption[]) => (
+    <div className="choice-grid">
+      {displayOptions.map((option, index) => {
+        return (
           <button
             key={option.value}
-            className={`choice-button ${option.description ? "guided" : ""} ${value === option.value ? "selected" : ""}`}
+            className={`choice-button ${value === option.value ? "selected" : ""}`}
             type="button"
             role="radio"
             aria-checked={value === option.value}
+            aria-label={
+              option.description
+                ? `${option.label}：${option.description}`
+                : option.label
+            }
+            title={option.description || undefined}
             tabIndex={
-              value === option.value || (!value && index === 0) ? 0 : -1
+              value === option.value ||
+              (!common.some((candidate) => candidate.value === value) &&
+                displayOptions === common &&
+                index === 0)
+                ? 0
+                : -1
             }
             onClick={() => onChange(option.value)}
             onKeyDown={(event) => {
@@ -2387,15 +2558,20 @@ function ChoiceGroup({
               event.preventDefault();
               const direction =
                 event.key === "ArrowLeft" || event.key === "ArrowUp" ? -1 : 1;
+              const buttons = Array.from(
+                event.currentTarget
+                  .closest("fieldset")
+                  ?.querySelectorAll<HTMLButtonElement>('[role="radio"]') ??
+                  [],
+              ).filter((button) => {
+                const details = button.closest("details");
+                return !details || details.open;
+              });
+              const currentIndex = buttons.indexOf(event.currentTarget);
               const nextIndex =
-                (index + direction + normalizedOptions.length) %
-                normalizedOptions.length;
-              onChange(normalizedOptions[nextIndex].value);
-              const buttons =
-                event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>(
-                  '[role="radio"]',
-                );
-              buttons?.[nextIndex]?.focus();
+                (currentIndex + direction + buttons.length) % buttons.length;
+              buttons[nextIndex]?.click();
+              buttons[nextIndex]?.focus();
             }}
           >
             <span className="choice-button-heading">
@@ -2404,10 +2580,32 @@ function ChoiceGroup({
               ) : null}
               {option.label}
             </span>
-            {option.description ? <small>{option.description}</small> : null}
           </button>
-        ))}
-      </div>
+        );
+      })}
+    </div>
+  );
+
+  return (
+    <fieldset className="choice-block" role="radiogroup">
+      <legend>{label}</legend>
+      {helper ? <p>{helper}</p> : null}
+      {renderOptions(common)}
+      {more.length > 0 ? (
+        <details className="choice-more">
+          <summary>
+            {selectedIsMore
+              ? `更多情况（当前已选：${selectedOption?.label}）`
+              : `更多情况（${more.length}）`}
+          </summary>
+          {renderOptions(more)}
+        </details>
+      ) : null}
+      {selectedOption?.description ? (
+        <p className="choice-selected-note">
+          当前选择：{selectedOption.label}。{selectedOption.description}
+        </p>
+      ) : null}
     </fieldset>
   );
 }
@@ -2427,69 +2625,106 @@ function MultiChoiceGroup({
   helper?: string;
   exclusiveValues?: string[];
 }) {
-  const normalizedOptions = options.map((option) =>
-    typeof option === "string"
-      ? { value: option, label: option, description: "" }
-      : option,
+  const normalizedOptions = normalizeDisplayOptions(options, values);
+  const { common, more } = splitDisplayOptions(
+    normalizedOptions,
+    getCompactOptionValues(options),
+  );
+  const selectedOptions = normalizedOptions.filter((option) =>
+    values.includes(option.value),
+  );
+  const selectedMoreCount = more.filter((option) =>
+    values.includes(option.value),
+  ).length;
+  const renderOptions = (displayOptions: DisplayOption[]) => (
+    <div className="choice-grid">
+      {displayOptions.map((option) => {
+        const selected = values.includes(option.value);
+        return (
+          <button
+            key={option.value}
+            className={`choice-button ${selected ? "selected" : ""}`}
+            type="button"
+            aria-pressed={selected}
+            aria-label={
+              option.description
+                ? `${option.label}：${option.description}`
+                : option.label
+            }
+            title={option.description || undefined}
+            onClick={() => {
+              if (exclusiveValues.includes(option.value)) {
+                onChange(selected ? [] : [option.value]);
+                return;
+              }
+              const withoutExclusive = values.filter(
+                (item) => !exclusiveValues.includes(item),
+              );
+              onChange(
+                selected
+                  ? withoutExclusive.filter((item) => item !== option.value)
+                  : [...withoutExclusive, option.value],
+              );
+            }}
+          >
+            <span className="choice-button-heading">
+              {selected ? <Check size={16} weight="bold" /> : null}
+              {option.label}
+            </span>
+          </button>
+        );
+      })}
+    </div>
   );
 
   return (
     <fieldset className="choice-block multi-choice-block">
       <legend>{label}</legend>
       {helper ? <p>{helper}</p> : null}
-      <div className="choice-grid">
-        {normalizedOptions.map((option) => {
-          const selected = values.includes(option.value);
-          return (
-            <button
-              key={option.value}
-              className={`choice-button ${option.description ? "guided" : ""} ${selected ? "selected" : ""}`}
-              type="button"
-              aria-pressed={selected}
-              onClick={() => {
-                if (exclusiveValues.includes(option.value)) {
-                  onChange(selected ? [] : [option.value]);
-                  return;
-                }
-                const withoutExclusive = values.filter(
-                  (item) => !exclusiveValues.includes(item),
-                );
-                onChange(
-                  selected
-                    ? withoutExclusive.filter((item) => item !== option.value)
-                    : [...withoutExclusive, option.value],
-                );
-              }}
-            >
-              <span className="choice-button-heading">
-                {selected ? <Check size={16} weight="bold" /> : null}
-                {option.label}
-              </span>
-              {option.description ? <small>{option.description}</small> : null}
-            </button>
-          );
-        })}
-      </div>
+      {renderOptions(common)}
+      {more.length > 0 ? (
+        <details className="choice-more">
+          <summary>
+            {selectedMoreCount > 0
+              ? `更多情况（已选 ${selectedMoreCount} 项）`
+              : `更多情况（${more.length}）`}
+          </summary>
+          {renderOptions(more)}
+        </details>
+      ) : null}
+      {values.length > 0 ? (
+        <p className="choice-selected-note">
+          已选择：
+          {selectedOptions
+            .slice(0, 3)
+            .map((option) => option.label)
+            .join("、")}
+          {selectedOptions.length > 3
+            ? `等 ${selectedOptions.length} 项`
+            : ""}
+          。再次点击可取消。
+        </p>
+      ) : null}
     </fieldset>
   );
 }
 
 function InterviewGuide({ guide }: { guide: SectionGuide }) {
   return (
-    <aside className="interview-guide">
-      <div className="interview-guide-heading">
+    <details className="interview-guide">
+      <summary className="interview-guide-heading">
         <Info size={19} />
         <span>
-          <strong>客户沟通与填写指导</strong>
-          <small>{guide.why}</small>
+          <strong>填写帮助</strong>
+          <small>查看沟通问法、填写口径和资料建议</small>
         </span>
-      </div>
-      <p className="interview-guide-question">
-        <b>可以这样问</b>
-        <span>{guide.ask}</span>
-      </p>
-      <details>
-        <summary>查看填写口径、示例与建议资料</summary>
+      </summary>
+      <div className="interview-guide-content">
+        <p className="interview-guide-why">{guide.why}</p>
+        <p className="interview-guide-question">
+          <b>可以这样问</b>
+          <span>{guide.ask}</span>
+        </p>
         <div className="interview-guide-details">
           <p>
             <b>填写口径</b>
@@ -2508,8 +2743,8 @@ function InterviewGuide({ guide }: { guide: SectionGuide }) {
             </p>
           ) : null}
         </div>
-      </details>
-    </aside>
+      </div>
+    </details>
   );
 }
 
@@ -2526,17 +2761,43 @@ function GuidedSelect({
   onChange: (value: string) => void;
   helper?: string;
 }) {
-  const selected = options.find((option) => option.value === value);
+  const normalizedOptions = normalizeDisplayOptions(options, [value]);
+  const { common, more } = splitDisplayOptions(
+    normalizedOptions,
+    getCompactOptionValues(options),
+  );
+  const selected = normalizedOptions.find(
+    (option) => option.value === value,
+  );
   return (
     <label className="guided-select">
       <span>{label}</span>
       {helper ? <small>{helper}</small> : null}
       <select value={value} onChange={(event) => onChange(event.target.value)}>
-        {options.map((option) => (
-          <option value={option.value} key={option.value}>
-            {option.label}
-          </option>
-        ))}
+        {more.length > 0 ? (
+          <>
+            <optgroup label="常用">
+              {common.map((option) => (
+                <option value={option.value} key={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </optgroup>
+            <optgroup label="更多情况">
+              {more.map((option) => (
+                <option value={option.value} key={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </optgroup>
+          </>
+        ) : (
+          common.map((option) => (
+            <option value={option.value} key={option.value}>
+              {option.label}
+            </option>
+          ))
+        )}
       </select>
       {selected ? <small>{selected.description}</small> : null}
     </label>
