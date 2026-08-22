@@ -2378,12 +2378,12 @@ function Topbar({
   return (
     <header className="topbar">
       <a className="brand" href="/" aria-label="返回团小保首页">
-        <span className="brand-mark" aria-hidden="true">
-          <img src={`${import.meta.env.BASE_URL}txb-icon.png`} alt="" />
+        <span className="brand-logo" aria-hidden="true">
+          <img src={`${import.meta.env.BASE_URL}finance-module-icon.svg`} alt="" />
         </span>
         <span>
-          <strong>团小保</strong>
-          <small>财务规划工作台</small>
+          <strong>团小保 · 财务规划工作台</strong>
+          <small>先看清家庭，再规划未来</small>
         </span>
       </a>
 
