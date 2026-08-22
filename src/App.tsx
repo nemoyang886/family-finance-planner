@@ -19,6 +19,7 @@ import {
   ListChecks,
   PiggyBank,
   ShieldCheck,
+  SignOut,
   SlidersHorizontal,
   Sparkle,
   TrendUp,
@@ -55,6 +56,59 @@ type StepId =
 type ViewMode = "form" | "report";
 type SaveStatus = "saved" | "saving";
 type ExportStatus = "idle" | "pdf" | "image";
+
+type AuthSession = {
+  account: string;
+  userid: string;
+  accessState: string;
+  token: string;
+};
+
+type AuthViewState =
+  | { status: "loading" }
+  | { status: "signed-out" }
+  | { status: "expired"; session: AuthSession }
+  | { status: "offline" }
+  | { status: "ready"; session: AuthSession };
+
+const AUTH_STORAGE_KEY = "wb_dinglian_auth";
+
+function authApiBase() {
+  return location.hostname.endsWith("leo-hwp.cn")
+    ? "/dinglian-sync/"
+    : "https://leo-hwp.cn/dinglian-sync/";
+}
+
+function readStoredAuth(): AuthSession | null {
+  try {
+    const raw = localStorage.getItem(AUTH_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<{
+      account: string;
+      userid: string;
+      access_state: string;
+      token: string;
+    }>;
+    if (!parsed.token || !parsed.account) return null;
+    return {
+      account: parsed.account,
+      userid: parsed.userid || parsed.account,
+      accessState: parsed.access_state || "active",
+      token: parsed.token,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function plannerDraftKey(account: string) {
+  return `family-finance-planner-draft:${account}`;
+}
+
+function accountEntryUrl(kind: "login" | "register") {
+  const next = `${location.pathname}${location.search}`;
+  return `/dinglian/${kind}.html?next=${encodeURIComponent(next)}`;
+}
 
 type MemberRelation = "self" | "spouse" | "child" | "parent";
 type FamilyMember = {
@@ -1595,9 +1649,9 @@ function reconcilePlannerMembers(data: PlannerData): PlannerData {
   };
 }
 
-function loadInitialData() {
+function loadInitialData(account: string) {
   try {
-    const stored = localStorage.getItem("family-finance-planner-draft");
+    const stored = localStorage.getItem(plannerDraftKey(account));
     if (!stored) {
       return reconcilePlannerMembers({
         ...defaultData,
@@ -1858,7 +1912,144 @@ function loadInitialData() {
 }
 
 export function App() {
-  const [data, setData] = useState<PlannerData>(loadInitialData);
+  const [auth, setAuth] = useState<AuthViewState>({ status: "loading" });
+
+  useEffect(() => {
+    const isLocalPreview =
+      ["localhost", "127.0.0.1"].includes(location.hostname) &&
+      new URLSearchParams(location.search).get("preview") === "1";
+    if (isLocalPreview) {
+      setAuth({
+        status: "ready",
+        session: {
+          account: "preview",
+          userid: "本地预览",
+          accessState: "active",
+          token: "preview",
+        },
+      });
+      return;
+    }
+
+    const stored = readStoredAuth();
+    if (!stored) {
+      setAuth({ status: "signed-out" });
+      return;
+    }
+
+    const controller = new AbortController();
+    void fetch(`${authApiBase()}me`, {
+      headers: { Authorization: `Bearer ${stored.token}` },
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        if (response.status === 401 || response.status === 403) {
+          localStorage.removeItem(AUTH_STORAGE_KEY);
+          setAuth({ status: "signed-out" });
+          return;
+        }
+        if (!response.ok) throw new Error("account-service-unavailable");
+        const profile = (await response.json()) as Partial<{
+          account: string;
+          userid: string;
+          access_state: string;
+        }>;
+        const session = {
+          ...stored,
+          account: profile.account || stored.account,
+          userid: profile.userid || stored.userid,
+          accessState: profile.access_state || stored.accessState,
+        };
+        setAuth(
+          session.accessState === "active"
+            ? { status: "ready", session }
+            : { status: "expired", session },
+        );
+      })
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        setAuth({ status: "offline" });
+      });
+    return () => controller.abort();
+  }, []);
+
+  if (auth.status !== "ready") {
+    return <AccountGate state={auth.status} />;
+  }
+
+  return (
+    <PlannerWorkspace
+      session={auth.session}
+      onLogout={() => {
+        localStorage.removeItem(AUTH_STORAGE_KEY);
+        location.href = accountEntryUrl("login");
+      }}
+    />
+  );
+}
+
+function AccountGate({
+  state,
+}: {
+  state: Exclude<AuthViewState["status"], "ready">;
+}) {
+  const isLoading = state === "loading";
+  const isExpired = state === "expired";
+  const isOffline = state === "offline";
+  return (
+    <main className="account-gate">
+      <section className="account-card" aria-live="polite">
+        <img src={`${import.meta.env.BASE_URL}txb-icon.png`} alt="团小保" />
+        <span className="eyebrow">团小保 · 财务规划工作台</span>
+        <h1>
+          {isLoading
+            ? "正在确认账号"
+            : isExpired
+              ? "当前使用期已结束"
+              : isOffline
+                ? "暂时无法确认账号"
+                : "登录后开始规划"}
+        </h1>
+        <p>
+          {isLoading
+            ? "请稍候，正在读取你的团小保账号状态。"
+            : isExpired
+              ? "你的资料仍会保留。续期后即可继续填写、预览并导出报告。"
+              : isOffline
+                ? "账号服务暂时不可用，请检查网络后重新尝试。"
+                : "定联和财务规划使用同一个团小保账号，客户资料按账号隔离。"}
+        </p>
+        {!isLoading && (
+          <div className="account-actions">
+            {isOffline ? (
+              <button className="button button-primary" type="button" onClick={() => location.reload()}>
+                重新连接
+              </button>
+            ) : isExpired ? (
+              <a className="button button-primary" href="/dinglian/expired.html">
+                查看使用期
+              </a>
+            ) : (
+              <>
+                <a className="button button-primary" href={accountEntryUrl("login")}>登录</a>
+                <a className="button button-secondary" href={accountEntryUrl("register")}>免费注册</a>
+              </>
+            )}
+          </div>
+        )}
+      </section>
+    </main>
+  );
+}
+
+function PlannerWorkspace({
+  session,
+  onLogout,
+}: {
+  session: AuthSession;
+  onLogout: () => void;
+}) {
+  const [data, setData] = useState<PlannerData>(() => loadInitialData(session.account));
   const [activeStep, setActiveStep] = useState<StepId>("cashflow");
   const [viewMode, setViewMode] = useState<ViewMode>("form");
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("saved");
@@ -1966,11 +2157,11 @@ export function App() {
   useEffect(() => {
     setSaveStatus("saving");
     const timer = window.setTimeout(() => {
-      localStorage.setItem("family-finance-planner-draft", JSON.stringify(data));
+      localStorage.setItem(plannerDraftKey(session.account), JSON.stringify(data));
       setSaveStatus("saved");
     }, 420);
     return () => window.clearTimeout(timer);
-  }, [data]);
+  }, [data, session.account]);
 
   const update = <K extends keyof PlannerData>(
     key: K,
@@ -2069,7 +2260,7 @@ export function App() {
             "新建档案会清空当前浏览器中的草稿，是否继续？",
           );
           if (!shouldReset) return;
-          localStorage.removeItem("family-finance-planner-draft");
+          localStorage.removeItem(plannerDraftKey(session.account));
           setData(reconcilePlannerMembers({
             ...emptyData,
             familyMembers: emptyFamilyMembers.map((member) => ({
@@ -2087,6 +2278,8 @@ export function App() {
           setActiveStep("report");
           setViewMode("report");
         }}
+        session={session}
+        onLogout={onLogout}
       />
 
       {viewMode === "report" ? (
@@ -2170,6 +2363,8 @@ function Topbar({
   onViewModeChange,
   onNew,
   onReport,
+  session,
+  onLogout,
 }: {
   householdName: string;
   saveStatus: SaveStatus;
@@ -2177,18 +2372,20 @@ function Topbar({
   onViewModeChange: (mode: ViewMode) => void;
   onNew: () => void;
   onReport: () => void;
+  session: AuthSession;
+  onLogout: () => void;
 }) {
   return (
     <header className="topbar">
-      <div className="brand">
+      <a className="brand" href="/" aria-label="返回团小保首页">
         <span className="brand-mark" aria-hidden="true">
-          <ChartDonut size={23} weight="fill" />
+          <img src={`${import.meta.env.BASE_URL}txb-icon.png`} alt="" />
         </span>
         <span>
-          <strong>家庭财务规划</strong>
-          <small>顾问工作台</small>
+          <strong>团小保</strong>
+          <small>财务规划工作台</small>
         </span>
-      </div>
+      </a>
 
       <div className="household-context">
         <span className="context-label">当前档案</span>
@@ -2213,6 +2410,9 @@ function Topbar({
       </div>
 
       <div className="topbar-actions">
+        <span className="account-chip" title={`账号：${session.account}`}>
+          {session.userid}
+        </span>
         <span className={`save-state ${saveStatus}`}>
           {saveStatus === "saving" ? (
             <CircleNotch className="spin" size={15} />
@@ -2228,6 +2428,9 @@ function Topbar({
         <button className="button button-primary compact" type="button" onClick={onReport}>
           <FileText size={17} />
           生成报告
+        </button>
+        <button className="icon-button" type="button" onClick={onLogout} aria-label="退出登录" title="退出登录">
+          <SignOut size={18} />
         </button>
       </div>
     </header>
@@ -4895,7 +5098,7 @@ function ReportPage({
   const householdRisk = getHouseholdRiskResult(data, metrics);
   const reportRecipient =
     data.householdName.trim().replace(/家庭$/, "") || "尊敬的客户";
-  const reportTitle = `家庭财务安全分析报告——${reportRecipient}`;
+  const reportTitle = `家庭财务安全分析报告 - ${reportRecipient}`;
   const safeReportName = reportTitle.replace(/[\\/:*?"<>|]/g, "-");
   const activePolicyPeople = getActivePolicyPeople(data);
   const hasNonContractPolicySource = activePolicyPeople.some(
@@ -5725,7 +5928,7 @@ function ReportPage({
             <span className="report-label">家庭财务安全与长期规划</span>
             <h1>
               <span>家庭财务安全分析报告</span>
-              <small>——{reportRecipient}</small>
+              <small>- {reportRecipient}</small>
             </h1>
             <p>看清当下，安排未来，让家庭的每一次选择更从容。</p>
           </header>

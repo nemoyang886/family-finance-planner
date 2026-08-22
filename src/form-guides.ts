@@ -73,17 +73,17 @@ export const guidedOptions: Record<string, GuidedOption[]> = {
     },
     {
       value: "1-3年",
-      label: "1–3 年",
+      label: "1-3 年",
       description: "共同生活已形成初步收支与决策习惯。",
     },
     {
       value: "4-7年",
-      label: "4–7 年",
+      label: "4-7 年",
       description: "家庭责任通常进入稳定发展阶段。",
     },
     {
       value: "8-15年",
-      label: "8–15 年",
+      label: "8-15 年",
       description: "常与子女成长、房贷和赡养责任重叠。",
     },
     {
@@ -147,7 +147,7 @@ export const guidedOptions: Record<string, GuidedOption[]> = {
     },
     {
       value: "计划1-3年",
-      label: "计划 1–3 年",
+      label: "计划 1-3 年",
       description: "作为中期家庭成员与现金流变化记录。",
     },
     {
@@ -262,12 +262,12 @@ export const guidedOptions: Record<string, GuidedOption[]> = {
     {
       value: "子女婴幼儿",
       label: "子女婴幼儿",
-      description: "家庭中有 0–6 岁子女。",
+      description: "家庭中有 0-6 岁子女。",
     },
     {
       value: "子女成长",
       label: "子女成长",
-      description: "家庭中有 7–17 岁子女。",
+      description: "家庭中有 7-17 岁子女。",
     },
     {
       value: "子女高等教育或初入社会",
@@ -805,7 +805,7 @@ export const guidedOptions: Record<string, GuidedOption[]> = {
     },
     {
       value: "50-54岁",
-      label: "50–54 岁",
+      label: "50-54 岁",
       description: "按希望开始减少工作的年龄填写。",
     },
     {
@@ -958,12 +958,12 @@ export const guidedOptions: Record<string, GuidedOption[]> = {
     },
     {
       value: "3-6个月",
-      label: "3–6 个月",
+      label: "3-6 个月",
       description: "希望覆盖三至六个月必要支出。",
     },
     {
       value: "6-12个月",
-      label: "6–12 个月",
+      label: "6-12 个月",
       description: "希望覆盖六至十二个月必要支出。",
     },
     {
@@ -1027,12 +1027,12 @@ export const guidedOptions: Record<string, GuidedOption[]> = {
     },
     {
       value: "可接受约5%-10%",
-      label: "约 5%–10%",
+      label: "约 5%-10%",
       description: "能够接受一定波动并继续持有。",
     },
     {
       value: "可接受约10%-20%",
-      label: "约 10%–20%",
+      label: "约 10%-20%",
       description: "能够承受中等波动和较长恢复周期。",
     },
     {
@@ -1176,14 +1176,14 @@ export const sectionGuides: Record<string, SectionGuide> = {
     ask: "如果一笔三年以上不用的资金短期出现波动，您会更关注本金稳定，还是能接受一定波动？若主要收入暂停，希望现金能维持几个月必要支出？",
     method:
       "记录客户真实反应，不做引导；流动性月份按必要生活、教育和赡养支出计算；本页不是正式投资适当性测评，主观意愿不等于客观承受能力。",
-    example: "示例：稳健；有波动资产经历；可接受约 5%–10% 的短期下降；希望保留 6–12 个月必要支出。",
+    example: "示例：稳健；有波动资产经历；可接受约 5%-10% 的短期下降；希望保留 6-12 个月必要支出。",
     source: "以情境访谈和客户确认记录为主，同时参考近期大额支出、收入稳定性和负债情况。",
   },
   notes: {
     why: "把数据转化为客户听得懂的家庭责任解读，并明确下一步需要核实的资料。",
     ask: "在这些信息里，您最担心哪项责任中断？还有哪些数字或保单需要回家确认后再补充？",
     method:
-      "按“现状—指标意义—家庭责任—待核实事项”书写；不写具体产品推荐、收益承诺或承保结论；估算和待确认资料必须明确标注。",
+      "按“现状、指标意义、家庭责任、待核实事项”书写；不写具体产品推荐、收益承诺或承保结论；估算和待确认资料必须明确标注。",
     example:
       "示例：家庭目前保持年度结余，但可随时使用资金对必要支出的覆盖仍有限。建议优先核实现有医疗、重疾和寿险责任，再确认负债及教育目标金额。",
     source: "仅使用本表已确认或已标明估算状态的资料，不补写客户未提供的事实。",
